@@ -1,0 +1,11 @@
+fastapi==0.124.4
+uvicorn[standard]==0.38.0
+pydantic-settings==2.12.0
+psycopg[binary]==3.3.2
+pgvector==0.4.2
+numpy==2.4.0
+scikit-learn==1.8.0
+sentence-transformers==5.2.0
+transformers==4.57.3
+torch==2.9.1
+neo4j==6.0.3
