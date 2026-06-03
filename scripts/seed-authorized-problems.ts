@@ -1,19 +1,45 @@
 import crypto from "node:crypto";
 import { Client } from "pg";
+import { config as loadEnv } from "dotenv";
 
 import { problems } from "../src/data/problems.ts";
 
+loadEnv({ path: ".env.local", override: false });
+loadEnv({ path: ".env", override: false });
+
 const staticTopicEdges = [
 	["arrays", "hash-maps", "Hash maps depend on array indexing and lookup patterns."],
+	["arrays", "hashing", "Hashing practice builds on direct array traversal."],
+	["arrays", "strings", "String scans use the same loop invariants as arrays."],
 	["arrays", "sorting", "Sorting is easiest after array traversal is fluent."],
+	["arrays", "prefix-sums", "Prefix aggregates extend array scanning."],
+	["arrays", "binary-search", "Binary search requires fluent indexed array access."],
+	["strings", "stacks", "Bracket and parser problems build on character scanning."],
+	["stacks", "monotonic-stack", "Monotonic stacks add ordering invariants to stack use."],
 	["hash-maps", "two-pointers", "Two-pointer work often combines with lookup state."],
+	["hash-maps", "sliding-window", "Sliding windows use hash state for membership and counts."],
 	["sorting", "intervals", "Interval merging starts with ordered ranges."],
+	["sorting", "heaps", "Heap ordering is easier after comparison-based sorting."],
+	["binary-search", "divide-and-conquer", "Divide-and-conquer uses the same split reasoning."],
 	["two-pointers", "sliding-window", "Sliding windows extend two-pointer reasoning."],
 	["arrays", "graph-traversal", "Grid and graph traversal require structured containers."],
+	["queues", "bfs", "Breadth-first traversal depends on queue discipline."],
+	["graph-traversal", "dfs", "Depth-first traversal is a core graph traversal strategy."],
+	["graph-traversal", "topological-sort", "Topological sort depends on directed graph traversal."],
 	[
 		"graph-traversal",
 		"dynamic-programming",
 		"DP on graphs/grids benefits from traversal order.",
+	],
+	[
+		"dynamic-programming",
+		"unbounded-knapsack",
+		"Unbounded knapsack is a focused dynamic programming recurrence.",
+	],
+	[
+		"dynamic-programming",
+		"sequences",
+		"Sequence optimization problems use dynamic programming state transitions.",
 	],
 ] as const;
 
@@ -27,6 +53,34 @@ function topicSlug(value: string) {
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, "-")
 		.replace(/^-|-$/g, "");
+}
+
+async function recomputeMlArtifacts() {
+	const mlServerUrl = process.env.ML_SERVER_URL;
+	if (!mlServerUrl) {
+		return;
+	}
+
+	try {
+		const embeddingsUrl = new URL("/embeddings/recompute", mlServerUrl);
+		const embeddings = await fetch(embeddingsUrl, { method: "POST" });
+		if (!embeddings.ok) {
+			throw new Error(`Embedding recompute failed with ${embeddings.status}.`);
+		}
+
+		const clustersUrl = new URL("/clusters/recompute", mlServerUrl);
+		const clusters = await fetch(clustersUrl, { method: "POST" });
+		if (!clusters.ok) {
+			throw new Error(`Cluster recompute failed with ${clusters.status}.`);
+		}
+		console.log("Recomputed ML embeddings and clusters.");
+	} catch (error: unknown) {
+		console.warn(
+			error instanceof Error
+				? error.message
+				: "Unable to recompute ML artifacts.",
+		);
+	}
 }
 
 async function main() {
@@ -67,14 +121,18 @@ async function main() {
 					statement_hash
 				)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $12)
-				ON CONFLICT (statement_hash) DO UPDATE
-				SET title = EXCLUDED.title,
+				ON CONFLICT (external_id) DO UPDATE
+				SET slug = EXCLUDED.slug,
+					title = EXCLUDED.title,
 					difficulty = EXCLUDED.difficulty,
 					statement = EXCLUDED.statement,
 					input_contract = EXCLUDED.input_contract,
 					output_contract = EXCLUDED.output_contract,
 					constraints = EXCLUDED.constraints,
 					metadata = EXCLUDED.metadata,
+					source_name = EXCLUDED.source_name,
+					source_license = EXCLUDED.source_license,
+					statement_hash = EXCLUDED.statement_hash,
 					updated_at = now()
 				RETURNING id
 				`,
@@ -105,6 +163,12 @@ async function main() {
 			}
 
 			await client.query("DELETE FROM problem_test_cases WHERE problem_id = $1", [
+				problemId,
+			]);
+			await client.query("DELETE FROM problem_solutions WHERE problem_id = $1", [
+				problemId,
+			]);
+			await client.query("DELETE FROM problem_embeddings WHERE problem_id = $1", [
 				problemId,
 			]);
 
@@ -201,6 +265,7 @@ async function main() {
 	}
 
 	console.log(`Seeded ${problems.length} authorized problems.`);
+	await recomputeMlArtifacts();
 }
 
 main().catch((error: unknown) => {

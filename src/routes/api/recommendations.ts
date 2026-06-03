@@ -1,6 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { jsonResponse } from "#/lib/json";
-import { localRecommendations } from "#/lib/local-recommendations";
+import {
+	localRecommendations,
+	recordRecommendationEvents,
+} from "#/lib/local-recommendations";
 
 export const Route = createFileRoute("/api/recommendations")({
 	server: {
@@ -18,13 +21,22 @@ export const Route = createFileRoute("/api/recommendations")({
 							mlServerUrl,
 						);
 						upstream.searchParams.set("problem_id", problemId);
-						upstream.searchParams.set("limit", "5");
+						upstream.searchParams.set("limit", "3");
 
 						const response = await fetch(upstream);
 						if (response.ok) {
 							const payload = await response.json();
+							const recommendations = (payload.recommendations ?? []).slice(
+								0,
+								3,
+							);
+							await recordRecommendationEvents({
+								anchorProblemId: problemId,
+								recommendations,
+								userExternalId: userId,
+							});
 							return jsonResponse({
-								recommendations: payload.recommendations ?? [],
+								recommendations,
 								source: "ml-server",
 							});
 						}
@@ -33,8 +45,18 @@ export const Route = createFileRoute("/api/recommendations")({
 					}
 				}
 
+				const recommendations = await localRecommendations(
+					problemId,
+					userId,
+					3,
+				);
+				await recordRecommendationEvents({
+					anchorProblemId: problemId,
+					recommendations,
+					userExternalId: userId,
+				});
 				return jsonResponse({
-					recommendations: localRecommendations(problemId),
+					recommendations,
 					source: "local-fallback",
 				});
 			},

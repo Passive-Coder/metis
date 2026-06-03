@@ -3,11 +3,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getProblem } from "#/data/problems";
 import { jsonResponse } from "#/lib/json";
 import { executeProblem } from "#/lib/judge0";
+import { recordPracticeAttempt } from "#/lib/practice-telemetry";
 
 type ExecutePayload = {
 	mode?: "compile" | "submit";
 	problemId?: string;
 	sourceCode?: string;
+	userId?: string;
 };
 
 export const Route = createFileRoute("/api/execute")({
@@ -40,9 +42,27 @@ export const Route = createFileRoute("/api/execute")({
 				}
 
 				try {
-					return jsonResponse(
-						await executeProblem(problem, payload.sourceCode, mode),
+					const execution = await executeProblem(
+						problem,
+						payload.sourceCode,
+						mode,
 					);
+					try {
+						await recordPracticeAttempt({
+							execution,
+							problem,
+							sourceCode: payload.sourceCode,
+							userExternalId: payload.userId ?? "demo-user",
+						});
+					} catch (telemetryError: unknown) {
+						console.warn(
+							telemetryError instanceof Error
+								? telemetryError.message
+								: "Unable to record practice telemetry.",
+						);
+					}
+
+					return jsonResponse(execution);
 				} catch (error: unknown) {
 					const message =
 						error instanceof Error

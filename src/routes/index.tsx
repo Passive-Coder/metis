@@ -3,18 +3,12 @@ import {
 	ArrowRight,
 	BrainCircuit,
 	CheckCircle2,
-	ChevronDown,
 	CircleAlert,
-	Clock3,
 	Code2,
-	GitBranch,
 	Loader2,
-	Network,
 	Play,
 	RefreshCcw,
 	Send,
-	Sparkles,
-	Target,
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
@@ -23,6 +17,7 @@ const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 export const Route = createFileRoute("/")({ component: Home });
 
 type Difficulty = "Easy" | "Medium" | "Hard";
+type Screen = "landing" | "practice" | "recommendations";
 
 type PublicTestCase = {
 	id: string;
@@ -83,6 +78,8 @@ type Recommendation = {
 	score: number;
 	reason: string;
 	topicPath: string[];
+	features?: Record<string, number>;
+	pools?: string[];
 };
 
 type RecommendationResponse = {
@@ -93,6 +90,7 @@ type RecommendationResponse = {
 const userId = "demo-user";
 
 function Home() {
+	const [screen, setScreen] = useState<Screen>("landing");
 	const [problems, setProblems] = useState<PublicProblem[]>([]);
 	const [problemId, setProblemId] = useState<string>("");
 	const [code, setCode] = useState("");
@@ -142,7 +140,7 @@ function Home() {
 		[problemId, problems],
 	);
 
-	function selectProblem(nextProblemId: string) {
+	function openProblem(nextProblemId: string) {
 		const nextProblem = problems.find(
 			(problem) => problem.id === nextProblemId,
 		);
@@ -155,6 +153,13 @@ function Home() {
 		setRunResult(null);
 		setRecommendations(null);
 		setError(null);
+		setScreen("practice");
+	}
+
+	function startPractice() {
+		if (selectedProblem) {
+			setScreen("practice");
+		}
 	}
 
 	async function execute(mode: "compile" | "submit") {
@@ -188,6 +193,7 @@ function Home() {
 
 			if (mode === "submit" && payload.accepted) {
 				await loadRecommendations(selectedProblem.id);
+				setScreen("recommendations");
 			}
 		} catch (requestError: unknown) {
 			setError(
@@ -215,7 +221,74 @@ function Home() {
 		return (
 			<main className="app-shell loading-shell">
 				<Loader2 className="spin" size={22} />
-				<span>Loading coding workspace...</span>
+				<span>{error ?? "Loading coding workspace..."}</span>
+			</main>
+		);
+	}
+
+	if (screen === "landing") {
+		return (
+			<main className="app-shell landing-page">
+				<section className="landing-hero">
+					<div className="landing-copy">
+						<div className="brand-lockup landing-brand">
+							<div className="brand-mark">
+								<BrainCircuit size={21} />
+							</div>
+							<p>Metis</p>
+						</div>
+						<h1>
+							Practice code. Get the next problem from your actual run history.
+						</h1>
+						<p>
+							Solve one problem, submit it, and Metis ranks three next coding
+							questions from compiles, test progress, topic readiness, and
+							review timing.
+						</p>
+						<button
+							className="primary-button start-button"
+							disabled={problems.length === 0}
+							onClick={startPractice}
+							type="button"
+						>
+							Start
+							<ArrowRight size={18} />
+						</button>
+					</div>
+				</section>
+			</main>
+		);
+	}
+
+	if (screen === "recommendations") {
+		return (
+			<main className="app-shell recommendations-page">
+				<section className="recommendations-view">
+					<div className="recommendations-title">
+						<span>Next</span>
+						<h1>Choose your next coding problem.</h1>
+						<p>
+							These are ranked from your submit result and recent compile/test
+							history.
+						</p>
+					</div>
+
+					<div className="recommendation-list standalone">
+						{recommendations?.recommendations.slice(0, 3).map((item) => (
+							<button
+								className="recommendation-row"
+								key={`${item.pool}-${item.problemId}`}
+								onClick={() => openProblem(item.problemId)}
+								type="button"
+							>
+								<span>{item.pool}</span>
+								<strong>{item.title}</strong>
+								<small>{item.reason}</small>
+								<em>{Math.round(item.score * 100)}%</em>
+							</button>
+						))}
+					</div>
+				</section>
 			</main>
 		);
 	}
@@ -223,74 +296,14 @@ function Home() {
 	const accepted = runResult?.accepted === true;
 
 	return (
-		<main className="app-shell">
-			<header className="topbar">
-				<div className="brand-lockup">
-					<div className="brand-mark">
-						<BrainCircuit size={21} />
-					</div>
-					<div>
-						<p>Metis</p>
-						<span>Adaptive coding practice</span>
-					</div>
-				</div>
-				<output className="system-strip" aria-label="System status">
-					<span>
-						<Network size={14} />
-						Judge0 execution
-					</span>
-					<span>
-						<GitBranch size={14} />
-						Topic graph
-					</span>
-					<span>
-						<Sparkles size={14} />
-						Vector recommendations
-					</span>
-				</output>
-			</header>
-
-			<section className="workspace">
-				<aside className="problem-list" aria-label="Problem list">
-					<div className="list-heading">
-						<span>Learning Queue</span>
-						<ChevronDown size={16} />
-					</div>
-					{problems.map((problem) => (
-						<button
-							className={
-								problem.id === selectedProblem.id
-									? "problem-row active"
-									: "problem-row"
-							}
-							key={problem.id}
-							onClick={() => selectProblem(problem.id)}
-							type="button"
-						>
-							<span className="row-title">{problem.title}</span>
-							<span
-								className={`difficulty ${problem.difficulty.toLowerCase()}`}
-							>
-								{problem.difficulty}
-							</span>
-						</button>
-					))}
-				</aside>
-
+		<main className="app-shell practice-page">
+			<section className="practice-workspace">
 				<section className="problem-panel">
 					<div className="problem-meta">
 						<span
 							className={`difficulty ${selectedProblem.difficulty.toLowerCase()}`}
 						>
 							{selectedProblem.difficulty}
-						</span>
-						<span>
-							<Clock3 size={14} />
-							{selectedProblem.estimatedMinutes} min
-						</span>
-						<span>
-							<Target size={14} />
-							{selectedProblem.totalTestCases} tests
 						</span>
 					</div>
 
@@ -309,37 +322,7 @@ function Home() {
 					</div>
 
 					<div className="section-block">
-						<h2>Constraints</h2>
-						<ul>
-							{selectedProblem.constraints.map((constraint) => (
-								<li key={constraint}>{constraint}</li>
-							))}
-						</ul>
-					</div>
-
-					<div className="section-block">
-						<h2>Topics</h2>
-						<div className="pill-row">
-							{selectedProblem.topics.map((topic) => (
-								<span key={topic}>{topic}</span>
-							))}
-						</div>
-					</div>
-
-					<div className="section-block">
-						<h2>Prerequisites</h2>
-						<div className="path-row">
-							{selectedProblem.prerequisites.map((topic, index) => (
-								<span key={topic}>
-									{index > 0 ? <ArrowRight size={13} /> : null}
-									{topic}
-								</span>
-							))}
-						</div>
-					</div>
-
-					<div className="section-block">
-						<h2>Visible Examples</h2>
+						<h2>Public Test Cases</h2>
 						<div className="examples">
 							{selectedProblem.testCases.map((testCase) => (
 								<div className="example" key={testCase.id}>
@@ -356,7 +339,7 @@ function Home() {
 					<div className="editor-toolbar">
 						<div>
 							<span>Python 3</span>
-							<strong>Implement Solution.{selectedProblem.functionName}</strong>
+							<strong>Solution.{selectedProblem.functionName}</strong>
 						</div>
 						<div className="toolbar-actions">
 							<button
@@ -452,10 +435,7 @@ function Home() {
 									</strong>
 								</div>
 								<span>
-									{runResult.mode === "submit" ? "Submit" : "Compile"} ·{" "}
-									{runResult.engine === "judge0"
-										? "Judge0"
-										: "Local Python fallback"}
+									{runResult.mode === "submit" ? "Submit" : "Compile"}
 								</span>
 							</div>
 							<div className="case-results">
@@ -478,38 +458,6 @@ function Home() {
 												"No output"}
 										</code>
 									</div>
-								))}
-							</div>
-						</div>
-					) : null}
-
-					{recommendations ? (
-						<div className="recommendation-panel">
-							<div className="recommendation-heading">
-								<div>
-									<span>Next recommendations</span>
-									<strong>
-										Generated from{" "}
-										{recommendations.source === "ml-server"
-											? "ML server"
-											: "local fallback"}
-									</strong>
-								</div>
-								<BrainCircuit size={20} />
-							</div>
-							<div className="recommendation-list">
-								{recommendations.recommendations.map((item) => (
-									<button
-										className="recommendation-row"
-										key={`${item.pool}-${item.problemId}`}
-										onClick={() => selectProblem(item.problemId)}
-										type="button"
-									>
-										<span>{item.pool}</span>
-										<strong>{item.title}</strong>
-										<small>{item.reason}</small>
-										<em>{Math.round(item.score * 100)}%</em>
-									</button>
 								))}
 							</div>
 						</div>

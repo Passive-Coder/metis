@@ -269,3 +269,25 @@ export const userReviewState = pgTable(
 	},
 	(table) => [primaryKey({ columns: [table.userId, table.problemId] })],
 );
+
+export const recommendationEvents = pgTable("recommendation_events", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	userId: uuid("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	anchorProblemId: uuid("anchor_problem_id").references(() => problems.id, {
+		onDelete: "set null",
+	}),
+	recommendedProblemId: uuid("recommended_problem_id")
+		.notNull()
+		.references(() => problems.id, { onDelete: "cascade" }),
+	poolName: text("pool_name").notNull(),
+	score: doublePrecision("score").notNull(),
+	features: jsonb("features")
+		.$type<Record<string, unknown>>()
+		.notNull()
+		.default({}),
+	createdAt: timestamp("created_at", { withTimezone: true })
+		.notNull()
+		.defaultNow(),
+});

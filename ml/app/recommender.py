@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+import math
 from typing import Any
 
 from .db import get_connection
@@ -14,6 +15,7 @@ class Candidate:
     reason: str
     base_score: float
     features: dict[str, float] = field(default_factory=dict)
+    problem_uuid: str | None = None
     topic_path: list[str] = field(default_factory=list)
 
 
@@ -25,6 +27,34 @@ POOL_WEIGHTS = {
     "new_pattern": 0.14,
     "vector_similarity": 0.14,
 }
+
+DIFFICULTY_LEVEL = {
+    "Easy": 0.35,
+    "Medium": 0.62,
+    "Hard": 0.86,
+}
+
+
+def _clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
+    return min(maximum, max(minimum, value))
+
+
+def _sigmoid(value: float) -> float:
+    return 1 / (1 + math.exp(-value))
+
+
+def _pass_rate(passed: int | None, total: int | None) -> float:
+    if not total or total <= 0:
+        return 0.0
+    return _clamp(float(passed or 0) / float(total))
+
+
+def _days_since(value: datetime | None) -> float:
+    if value is None:
+        return 999.0
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return max(0.0, (datetime.now(UTC) - value).total_seconds() / 86400)
 
 
 def ensure_user(user_external_id: str) -> str:
@@ -149,6 +179,7 @@ def topic_sequence_pool(user_id: str, anchor_problem_uuid: str | None, limit: in
             difficulty=row["difficulty"],
             pool="topic_sequence",
             problem_id=row["problem_id"],
+            problem_uuid=row["problem_uuid"],
             reason=f"Next graph topic: {row['topic_name']}",
             title=row["title"],
             topic_path=_topic_path(row["problem_uuid"]),
@@ -219,6 +250,7 @@ def vector_pools(
                 features={"similarity": similarity},
                 pool=pool,
                 problem_id=row["problem_id"],
+                problem_uuid=row["problem_uuid"],
                 reason=reason,
                 title=row["title"],
                 topic_path=_topic_path(row["problem_uuid"]),
@@ -266,6 +298,7 @@ def spaced_repetition_pool(user_id: str, limit: int) -> list[Candidate]:
                 },
                 pool="spaced_repetition",
                 problem_id=row["problem_id"],
+                problem_uuid=row["problem_uuid"],
                 reason="Due under the SM-2 review schedule.",
                 title=row["title"],
                 topic_path=_topic_path(row["problem_uuid"]),
@@ -307,6 +340,7 @@ def new_pattern_pool(user_id: str, anchor_problem_uuid: str | None, limit: int) 
             features={"cluster_id": float(row["cluster_id"])},
             pool="new_pattern",
             problem_id=row["problem_id"],
+            problem_uuid=row["problem_uuid"],
             reason="A cluster or topic family the user has not attempted yet.",
             title=row["title"],
             topic_path=_topic_path(row["problem_uuid"]),
@@ -315,18 +349,250 @@ def new_pattern_pool(user_id: str, anchor_problem_uuid: str | None, limit: int) 
     ]
 
 
-def rank_candidates(candidates: list[Candidate], limit: int) -> list[dict[str, Any]]:
+def _attempt_features(user_id: str) -> dict[str, dict[str, float]]:
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT problem_id::text AS problem_uuid,
+                       status::text AS status,
+                       passed_test_count,
+                       total_test_count,
+                       created_at
+                FROM user_problem_attempts
+                WHERE user_id = %s
+                ORDER BY created_at ASC
+                LIMIT 5000
+                """,
+                (user_id,),
+            )
+            rows = cursor.fetchall()
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(row["problem_uuid"], []).append(row)
+
+    features: dict[str, dict[str, float]] = {}
+    for problem_uuid, attempts in grouped.items():
+        rates = [
+            _pass_rate(row["passed_test_count"], row["total_test_count"])
+            for row in attempts
+        ]
+        recent_rates = rates[-5:]
+        first_recent = recent_rates[0] if recent_rates else 0.0
+        last_recent = recent_rates[-1] if recent_rates else 0.0
+        last_attempt = attempts[-1] if attempts else None
+        features[problem_uuid] = {
+            "accepted_count": float(
+                sum(1 for row in attempts if row["status"] == "accepted")
+            ),
+            "attempt_count": float(len(attempts)),
+            "best_pass_rate": max(rates) if rates else 0.0,
+            "compile_count": float(
+                sum(1 for row in attempts if row["status"] == "compiled")
+            ),
+            "days_since_last": _days_since(last_attempt["created_at"] if last_attempt else None),
+            "failed_submit_count": float(
+                sum(
+                    1
+                    for row in attempts
+                    if row["status"] not in ("compiled", "accepted")
+                )
+            ),
+            "last_pass_rate": rates[-1] if rates else 0.0,
+            "pass_rate_trend": _clamp(last_recent - first_recent, -1.0, 1.0),
+            "recent_compile_count": float(
+                sum(
+                    1
+                    for row in attempts
+                    if row["status"] == "compiled"
+                    and _days_since(row["created_at"]) <= 7
+                )
+            ),
+            "submit_count": float(
+                sum(1 for row in attempts if row["status"] != "compiled")
+            ),
+        }
+    return features
+
+
+def _topic_mastery(user_id: str) -> dict[str, float]:
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT topic.name, state.mastery
+                FROM user_topic_state state
+                JOIN topics topic ON topic.id = state.topic_id
+                WHERE state.user_id = %s
+                """,
+                (user_id,),
+            )
+            return {
+                row["name"].strip().lower(): float(row["mastery"] or 0)
+                for row in cursor.fetchall()
+            }
+
+
+def _problem_topics(problem_uuid: str | None) -> list[str]:
+    if not problem_uuid:
+        return []
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT topic.name
+                FROM problem_topics problem_topic
+                JOIN topics topic ON topic.id = problem_topic.topic_id
+                WHERE problem_topic.problem_id::text = %s
+                ORDER BY problem_topic.weight DESC, topic.name ASC
+                """,
+                (problem_uuid,),
+            )
+            return [row["name"] for row in cursor.fetchall()]
+
+
+def _recommendation_event_features(user_id: str) -> dict[str, dict[str, float]]:
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT recommended_problem_id::text AS problem_uuid,
+                       created_at
+                FROM recommendation_events
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT 500
+                """,
+                (user_id,),
+            )
+            rows = cursor.fetchall()
+
+    features: dict[str, dict[str, float]] = {}
+    for row in rows:
+        item = features.setdefault(
+            row["problem_uuid"],
+            {"count": 0.0, "days_since_last": 999.0},
+        )
+        item["count"] += 1
+        item["days_since_last"] = min(
+            item["days_since_last"],
+            _days_since(row["created_at"]),
+        )
+    return features
+
+
+def _solved_difficulty_level(
+    attempts: dict[str, dict[str, float]],
+    candidates: list[Candidate],
+) -> float:
+    difficulty_by_uuid = {
+        candidate.problem_uuid: candidate.difficulty
+        for candidate in candidates
+        if candidate.problem_uuid
+    }
+    weighted = 0.0
+    weight = 0.0
+    for problem_uuid, stats in attempts.items():
+        if stats["accepted_count"] <= 0:
+            continue
+        recency = math.exp(-stats["days_since_last"] / 45)
+        weighted += DIFFICULTY_LEVEL.get(difficulty_by_uuid.get(problem_uuid, "Easy"), 0.35) * recency
+        weight += recency
+    return weighted / weight if weight else 0.35
+
+
+def _prereq_readiness(topic_path: list[str], topic_mastery: dict[str, float]) -> float:
+    if not topic_path:
+        return 0.72
+    values = []
+    for topic in topic_path:
+        key = topic.strip().lower()
+        if key in topic_mastery:
+            values.append(topic_mastery[key])
+        elif key in ("arrays", "strings"):
+            values.append(0.55)
+        else:
+            values.append(0.42)
+    return sum(values) / len(values)
+
+
+def _weak_topic_fit(topic_path: list[str], topic_mastery: dict[str, float]) -> float:
+    value = 0.0
+    for topic in topic_path:
+        key = topic.strip().lower()
+        if key in topic_mastery:
+            value = max(value, 1 - topic_mastery[key])
+    return _clamp(value)
+
+
+def rank_candidates(candidates: list[Candidate], limit: int, user_id: str) -> list[dict[str, Any]]:
+    attempts = _attempt_features(user_id)
+    topic_mastery = _topic_mastery(user_id)
+    event_features = _recommendation_event_features(user_id)
+    solved_level = _solved_difficulty_level(attempts, candidates)
     merged: dict[str, Candidate] = {}
     for candidate in candidates:
         weight = POOL_WEIGHTS.get(candidate.pool, 0.08)
-        score = candidate.base_score + weight
-        if candidate.difficulty == "Medium":
-            score += 0.03
-        elif candidate.difficulty == "Hard":
-            score -= 0.02
+        attempt = attempts.get(candidate.problem_uuid or "", {})
+        events = event_features.get(candidate.problem_uuid or "", {})
+        topics = candidate.topic_path or _problem_topics(candidate.problem_uuid)
+        readiness = _prereq_readiness(topics, topic_mastery)
+        weak_fit = _weak_topic_fit(topics, topic_mastery)
+        difficulty_target = DIFFICULTY_LEVEL.get(candidate.difficulty, 0.62)
+        difficulty_fit = _clamp(1 - abs(difficulty_target - (solved_level + 0.08)) / 0.65)
+        retry_value = 0.0
+        if attempt and attempt.get("accepted_count", 0) <= 0:
+            retry_value = _clamp(
+                attempt.get("failed_submit_count", 0) * 0.15
+                + attempt.get("compile_count", 0) * 0.05
+                + (1 - attempt.get("best_pass_rate", 0)) * 0.36
+                + max(0, attempt.get("pass_rate_trend", 0)) * 0.18
+            )
+        due_value = _clamp(candidate.features.get("days_late", 0) * 0.08 + (0.46 if candidate.pool == "spaced_repetition" else 0))
+        learning_value = max(
+            candidate.features.get("similarity", 0) * 0.75,
+            weak_fit * 0.78,
+            0.52 if not attempt else 0.12,
+            retry_value,
+        )
+        readiness_requirement = 0.68 if candidate.difficulty == "Hard" else 0.5 if candidate.difficulty == "Medium" else 0.32
+        readiness_gate = _sigmoid((readiness - readiness_requirement) * 7)
+        recent_solved_penalty = (
+            (3 - attempt.get("days_since_last", 999)) * 0.08
+            if attempt.get("accepted_count", 0) > 0 and attempt.get("days_since_last", 999) < 3
+            else 0
+        )
+        repeated_recommendation_penalty = (
+            min(0.2, events.get("count", 0) * 0.04 + (2 - events.get("days_since_last", 999)) * 0.04)
+            if events.get("days_since_last", 999) < 2
+            else 0
+        )
+        score = _clamp(
+            (
+                0.1
+                + candidate.base_score * 0.18
+                + weight * 0.22
+                + learning_value * 0.24
+                + difficulty_fit * 0.16
+                + readiness * 0.1
+                + due_value * 0.12
+                + max(0, attempt.get("pass_rate_trend", 0)) * 0.06
+                - recent_solved_penalty
+                - repeated_recommendation_penalty
+            )
+            * (0.72 + readiness_gate * 0.28)
+        )
 
         candidate.features["pool_weight"] = weight
         candidate.features["base_score"] = candidate.base_score
+        candidate.features["difficulty_fit"] = difficulty_fit
+        candidate.features["due_value"] = due_value
+        candidate.features["learning_value"] = learning_value
+        candidate.features["readiness"] = readiness
+        candidate.features["readiness_gate"] = readiness_gate
+        candidate.features["retry_value"] = retry_value
+        candidate.features["weak_topic_fit"] = weak_fit
         candidate.features["ranked_score"] = score
 
         existing = merged.get(candidate.problem_id)
@@ -365,4 +631,4 @@ def recommend(user_external_id: str, anchor_problem_id: str | None, limit: int =
     candidates.extend(vector_pools(user_id, anchor_problem_uuid, anchor, limit))
     candidates.extend(spaced_repetition_pool(user_id, limit))
     candidates.extend(new_pattern_pool(user_id, anchor_problem_uuid, limit))
-    return rank_candidates(candidates, limit)
+    return rank_candidates(candidates, limit, user_id)

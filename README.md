@@ -4,7 +4,7 @@ Adaptive coding practice with a local Judge0 execution engine, pgvector-backed s
 
 ## Important Content Boundary
 
-This project does not scrape or store proprietary LeetCode problem statements, hidden tests, or solution code. Use the ingestion paths only for original, licensed, or otherwise authorized problem data. The included seed problems are original sample content for development.
+This project does not scrape or store proprietary LeetCode problem statements, hidden tests, or solution code. Use the ingestion paths only for original, licensed, or otherwise authorized problem data. The included 100 seed problems are original LeetCode-style coding exercises for development.
 
 If a database credential was shared in chat or logs, rotate it before production use and put the replacement in `.env.local`.
 
@@ -78,7 +78,7 @@ The ML server generates candidates from five pools:
 - New pattern: unseen clusters and topics.
 - Vector similarity: direct nearest-neighbor candidates from pgvector.
 
-Candidates are merged by problem, scored with pool weight, similarity, due status, novelty, graph readiness, difficulty progression, and prior attempt signals.
+Candidates are merged by problem and ranked from actual practice telemetry: compile count, failed submits, best and recent test-pass rate, pass-rate trend over time, accepted history, topic mastery, due review state, difficulty fit, graph readiness, vector similarity, novelty, and recent recommendation exposure. The app returns three clickable coding-problem suggestions after an accepted submit.
 
 ## Judge0
 
