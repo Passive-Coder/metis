@@ -1,16 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { getProblem } from "#/data/problems";
+import { buildCompileAssistance } from "#/lib/compile-assistance";
 import { jsonResponse } from "#/lib/json";
 import { executeProblem } from "#/lib/judge0";
 import { recordPracticeAttempt } from "#/lib/practice-telemetry";
 
 type ExecutePayload = {
+	failedCompileStreak?: number;
 	mode?: "compile" | "submit";
 	problemId?: string;
 	sourceCode?: string;
 	userId?: string;
 };
+
+function failedCompileStreak(value: unknown) {
+	return typeof value === "number" && Number.isFinite(value)
+		? Math.max(1, Math.min(12, Math.round(value)))
+		: 1;
+}
 
 export const Route = createFileRoute("/api/execute")({
 	server: {
@@ -62,7 +70,16 @@ export const Route = createFileRoute("/api/execute")({
 						);
 					}
 
-					return jsonResponse(execution);
+					const assistance = await buildCompileAssistance({
+						execution,
+						failedCompileStreak: failedCompileStreak(
+							payload.failedCompileStreak,
+						),
+						problem,
+						sourceCode: payload.sourceCode,
+					});
+
+					return jsonResponse({ ...execution, assistance });
 				} catch (error: unknown) {
 					const message =
 						error instanceof Error

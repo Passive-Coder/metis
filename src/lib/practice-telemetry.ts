@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 
 import type { Problem } from "#/data/problems";
+import { extractCodeMetrics, sourceHash } from "#/lib/code-features";
 
 type AttemptStatus =
 	| "compiled"
@@ -25,6 +26,24 @@ type ExecutionSummary = {
 	passed: number;
 	results: ExecutionCaseResult[];
 	total: number;
+};
+
+type EditorEventType = "open" | "heartbeat" | "compile" | "submit" | "close";
+
+type EditorSessionMetrics = {
+	activeMs?: number;
+	charsAdded?: number;
+	charsDeleted?: number;
+	deleteCount?: number;
+	editCount?: number;
+	focusMs?: number;
+	idleMs?: number;
+	keystrokeCount?: number;
+	maxPauseMs?: number;
+	netChars?: number;
+	pasteCount?: number;
+	pauseCount?: number;
+	typingBursts?: number;
 };
 
 let pool: Pool | undefined;
@@ -85,6 +104,12 @@ function memoryKb(results: ExecutionCaseResult[]) {
 		return null;
 	}
 	return Math.max(...values);
+}
+
+function numberMetric(value: unknown) {
+	return typeof value === "number" && Number.isFinite(value)
+		? Math.max(0, Math.round(value))
+		: 0;
 }
 
 function attemptStatus(execution: ExecutionSummary): AttemptStatus {
@@ -205,16 +230,16 @@ async function updateTopicState(
 			exposure_count,
 			last_practiced_at
 		)
-		SELECT $1, problem_topic.topic_id, LEAST(1, $3 * problem_topic.weight), 1, now()
+		SELECT $1, problem_topic.topic_id, LEAST(1.0, $3::double precision * problem_topic.weight), 1, now()
 		FROM problem_topics problem_topic
 		WHERE problem_topic.problem_id = $2
 		ON CONFLICT (user_id, topic_id) DO UPDATE
 		SET mastery = LEAST(
-				1,
+				1.0,
 				GREATEST(
-					0,
-					user_topic_state.mastery * (1 - $4)
-						+ EXCLUDED.mastery * $4
+					0.0,
+					user_topic_state.mastery * (1.0 - $4::double precision)
+						+ EXCLUDED.mastery * $4::double precision
 				)
 			),
 			exposure_count = user_topic_state.exposure_count + 1,
@@ -353,6 +378,174 @@ export async function recordPracticeAttempt({
 
 	await updateTopicState(client, userId, problemId, execution);
 	await updateReviewState(client, userId, problemId, execution);
+
+	return { recorded: true };
+}
+
+export async function recordEditorEvent({
+	eventType,
+	metrics,
+	problemId: externalProblemId,
+	sessionId,
+	sourceCode,
+	userExternalId,
+}: {
+	eventType: EditorEventType;
+	metrics: EditorSessionMetrics;
+	problemId: string;
+	sessionId: string;
+	sourceCode?: string;
+	userExternalId: string;
+}) {
+	const client = getPool();
+	if (!client) {
+		return { recorded: false, reason: "DATABASE_URL is not configured." };
+	}
+
+	const userId = await ensureUser(client, userExternalId);
+	const problemResult = await client.query<{ id: string }>(
+		`
+		SELECT id
+		FROM problems
+		WHERE external_id = $1
+		   OR slug = $1
+		   OR id::text = $1
+		LIMIT 1
+		`,
+		[externalProblemId],
+	);
+	const problemId = problemResult.rows[0]?.id;
+	if (!userId || !problemId) {
+		return { recorded: false, reason: "Seeded problem row was not found." };
+	}
+
+	const compileIncrement = eventType === "compile" ? 1 : 0;
+	const submitIncrement = eventType === "submit" ? 1 : 0;
+	const closedAt = eventType === "close" ? "now()" : "NULL";
+
+	await client.query(
+		`
+		INSERT INTO editor_sessions (
+			id,
+			user_id,
+			problem_id,
+			active_ms,
+			idle_ms,
+			focus_ms,
+			max_pause_ms,
+			pause_count,
+			typing_bursts,
+			keystroke_count,
+			edit_count,
+			paste_count,
+			delete_count,
+			chars_added,
+			chars_deleted,
+			net_chars,
+			compile_count,
+			submit_count,
+			client_metrics,
+			last_event_at,
+			closed_at,
+			updated_at
+		)
+		VALUES (
+			$1,
+			$2,
+			$3,
+			$4,
+			$5,
+			$6,
+			$7,
+			$8,
+			$9,
+			$10,
+			$11,
+			$12,
+			$13,
+			$14,
+			$15,
+			$16,
+			$17,
+			$18,
+			$19::jsonb,
+			now(),
+			${closedAt},
+			now()
+		)
+		ON CONFLICT (id) DO UPDATE
+		SET active_ms = GREATEST(editor_sessions.active_ms, EXCLUDED.active_ms),
+			idle_ms = GREATEST(editor_sessions.idle_ms, EXCLUDED.idle_ms),
+			focus_ms = GREATEST(editor_sessions.focus_ms, EXCLUDED.focus_ms),
+			max_pause_ms = GREATEST(editor_sessions.max_pause_ms, EXCLUDED.max_pause_ms),
+			pause_count = GREATEST(editor_sessions.pause_count, EXCLUDED.pause_count),
+			typing_bursts = GREATEST(editor_sessions.typing_bursts, EXCLUDED.typing_bursts),
+			keystroke_count = GREATEST(editor_sessions.keystroke_count, EXCLUDED.keystroke_count),
+			edit_count = GREATEST(editor_sessions.edit_count, EXCLUDED.edit_count),
+			paste_count = GREATEST(editor_sessions.paste_count, EXCLUDED.paste_count),
+			delete_count = GREATEST(editor_sessions.delete_count, EXCLUDED.delete_count),
+			chars_added = GREATEST(editor_sessions.chars_added, EXCLUDED.chars_added),
+			chars_deleted = GREATEST(editor_sessions.chars_deleted, EXCLUDED.chars_deleted),
+			net_chars = EXCLUDED.net_chars,
+			compile_count = editor_sessions.compile_count + $17,
+			submit_count = editor_sessions.submit_count + $18,
+			client_metrics = editor_sessions.client_metrics || EXCLUDED.client_metrics,
+			last_event_at = now(),
+			closed_at = COALESCE(EXCLUDED.closed_at, editor_sessions.closed_at),
+			updated_at = now()
+		`,
+		[
+			sessionId,
+			userId,
+			problemId,
+			numberMetric(metrics.activeMs),
+			numberMetric(metrics.idleMs),
+			numberMetric(metrics.focusMs),
+			numberMetric(metrics.maxPauseMs),
+			numberMetric(metrics.pauseCount),
+			numberMetric(metrics.typingBursts),
+			numberMetric(metrics.keystrokeCount),
+			numberMetric(metrics.editCount),
+			numberMetric(metrics.pasteCount),
+			numberMetric(metrics.deleteCount),
+			numberMetric(metrics.charsAdded),
+			numberMetric(metrics.charsDeleted),
+			numberMetric(metrics.netChars),
+			compileIncrement,
+			submitIncrement,
+			JSON.stringify({
+				eventType,
+				metrics,
+				receivedAt: new Date().toISOString(),
+			}),
+		],
+	);
+
+	if (sourceCode && eventType !== "heartbeat") {
+		await client.query(
+			`
+			INSERT INTO editor_code_snapshots (
+				session_id,
+				user_id,
+				problem_id,
+				event_type,
+				source_hash,
+				source_code,
+				code_metrics
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+			`,
+			[
+				sessionId,
+				userId,
+				problemId,
+				eventType,
+				sourceHash(sourceCode),
+				sourceCode,
+				JSON.stringify(extractCodeMetrics(sourceCode)),
+			],
+		);
+	}
 
 	return { recorded: true };
 }

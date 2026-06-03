@@ -49,6 +49,18 @@ type EventRow = {
 	slug: string;
 };
 
+type SessionRow = {
+	active_ms: number;
+	chars_added: number;
+	compile_count: number;
+	idle_ms: number;
+	max_pause_ms: number;
+	pause_count: number;
+	problem_id: string | null;
+	slug: string;
+	submit_count: number;
+};
+
 type ProblemStats = {
 	acceptedCount: number;
 	attemptCount: number;
@@ -74,7 +86,18 @@ type ReviewState = {
 	intervalDays: number;
 };
 
+type BehaviorStats = {
+	activeMs: number;
+	compileCount: number;
+	idleRatio: number;
+	maxPauseMs: number;
+	pauseCount: number;
+	submitCount: number;
+	typingSpeedCpm: number;
+};
+
 type UserModel = {
+	behaviorStats: Map<string, BehaviorStats>;
 	dbAvailable: boolean;
 	eventCounts: Map<string, { count: number; daysSinceLast: number }>;
 	problemStats: Map<string, ProblemStats>;
@@ -162,6 +185,40 @@ function labelPool(poolName: string) {
 		.join(" ");
 }
 
+function poolGroup(poolName: string) {
+	if (
+		poolName === "near_fetch" ||
+		poolName === "far_fetch" ||
+		poolName === "vector_similarity"
+	) {
+		return "vector_fetch";
+	}
+	if (poolName === "weak_topic" || poolName === "remediation") {
+		return "remediation";
+	}
+	return poolName;
+}
+
+function recommendationGroup(
+	candidate: Pick<Recommendation, "pool" | "pools">,
+) {
+	const pools = candidate.pools.length
+		? candidate.pools
+		: [candidate.pool.toLowerCase().replaceAll(" ", "_")];
+	for (const poolName of [
+		"spaced_repetition",
+		"topic_sequence",
+		"new_pattern",
+		"weak_topic",
+		"remediation",
+	]) {
+		if (pools.includes(poolName)) {
+			return poolGroup(poolName);
+		}
+	}
+	return poolGroup(pools[0] ?? "ranked_pool");
+}
+
 function topicKey(topic: string) {
 	return topic.trim().toLowerCase();
 }
@@ -238,6 +295,29 @@ async function fetchEventRows(client: Pool, userExternalId: string) {
 		WHERE app_user.external_id = $1
 		ORDER BY event.created_at DESC
 		LIMIT 500
+		`,
+		[userExternalId],
+	);
+	return result.rows;
+}
+
+async function fetchEditorSessionRows(client: Pool, userExternalId: string) {
+	const result = await client.query<SessionRow>(
+		`
+		SELECT COALESCE(problem.external_id, problem.id::text) AS problem_id,
+		       problem.slug,
+		       AVG(editor_session.active_ms)::float AS active_ms,
+		       AVG(editor_session.idle_ms)::float AS idle_ms,
+		       AVG(editor_session.max_pause_ms)::float AS max_pause_ms,
+		       AVG(editor_session.pause_count)::float AS pause_count,
+		       AVG(editor_session.chars_added)::float AS chars_added,
+		       SUM(editor_session.compile_count)::float AS compile_count,
+		       SUM(editor_session.submit_count)::float AS submit_count
+		FROM editor_sessions editor_session
+		JOIN users app_user ON app_user.id = editor_session.user_id
+		JOIN problems problem ON problem.id = editor_session.problem_id
+		WHERE app_user.external_id = $1
+		GROUP BY problem.external_id, problem.id, problem.slug
 		`,
 		[userExternalId],
 	);
@@ -384,6 +464,30 @@ function summarizeRecommendationEvents(rows: EventRow[]) {
 	return state;
 }
 
+function summarizeBehaviorSessions(rows: SessionRow[]) {
+	const stats = new Map<string, BehaviorStats>();
+	for (const row of rows) {
+		const problem = problemForRow(row);
+		if (!problem) {
+			continue;
+		}
+		const activeMs = Number(row.active_ms) || 0;
+		const idleMs = Number(row.idle_ms) || 0;
+		const charsAdded = Number(row.chars_added) || 0;
+
+		stats.set(problem.id, {
+			activeMs,
+			compileCount: Number(row.compile_count) || 0,
+			idleRatio: idleMs / Math.max(1, activeMs + idleMs),
+			maxPauseMs: Number(row.max_pause_ms) || 0,
+			pauseCount: Number(row.pause_count) || 0,
+			submitCount: Number(row.submit_count) || 0,
+			typingSpeedCpm: activeMs > 0 ? (charsAdded / activeMs) * 60_000 : 0,
+		});
+	}
+	return stats;
+}
+
 function solvedDifficultyLevel(problemStats: Map<string, ProblemStats>) {
 	let weighted = 0;
 	let weight = 0;
@@ -406,11 +510,14 @@ async function buildUserModel(userExternalId: string): Promise<UserModel> {
 	}
 
 	try {
-		const [attemptRows, reviewRows, eventRows] = await Promise.all([
-			fetchAttemptRows(client, userExternalId),
-			fetchReviewRows(client, userExternalId),
-			fetchEventRows(client, userExternalId).catch(() => []),
-		]);
+		const [attemptRows, reviewRows, eventRows, sessionRows] = await Promise.all(
+			[
+				fetchAttemptRows(client, userExternalId),
+				fetchReviewRows(client, userExternalId),
+				fetchEventRows(client, userExternalId).catch(() => []),
+				fetchEditorSessionRows(client, userExternalId).catch(() => []),
+			],
+		);
 		const problemStats = summarizeProblemAttempts(attemptRows);
 		const topicStats = summarizeTopicAttempts(attemptRows);
 		const recentAttempts = attemptRows.filter(
@@ -427,6 +534,7 @@ async function buildUserModel(userExternalId: string): Promise<UserModel> {
 			) / Math.max(1, recentAttempts.length);
 
 		return {
+			behaviorStats: summarizeBehaviorSessions(sessionRows),
 			dbAvailable: true,
 			eventCounts: summarizeRecommendationEvents(eventRows),
 			problemStats,
@@ -448,6 +556,7 @@ async function buildUserModel(userExternalId: string): Promise<UserModel> {
 
 function emptyUserModel(dbAvailable: boolean): UserModel {
 	return {
+		behaviorStats: new Map(),
 		dbAvailable,
 		eventCounts: new Map(),
 		problemStats: new Map(),
@@ -502,6 +611,9 @@ function generateCandidates(anchor: Problem | undefined, model: UserModel) {
 
 		const stats = model.problemStats.get(problem.id);
 		const accepted = (stats?.acceptedCount ?? 0) > 0;
+		const behavior = model.behaviorStats.get(problem.id);
+		const skill = skillScore(stats, behavior);
+		const mastered = accepted && skill >= 0.72;
 		const combinedTopics = allTopics(problem);
 		const shared = anchor ? overlapScore(anchorTopics, combinedTopics) : 0;
 		const due = model.reviewState.get(problem.id);
@@ -522,7 +634,7 @@ function generateCandidates(anchor: Problem | undefined, model: UserModel) {
 			);
 		}
 
-		if (anchor && shared >= 0.32 && !accepted) {
+		if (anchor && shared >= 0.32 && !mastered) {
 			addCandidate(
 				candidates,
 				problem,
@@ -530,7 +642,7 @@ function generateCandidates(anchor: Problem | undefined, model: UserModel) {
 				0.52 + shared * 0.42,
 				"Keeps the solved pattern close enough for transfer practice.",
 			);
-		} else if (anchor && shared >= 0.12 && !accepted) {
+		} else if (anchor && shared >= 0.12 && !mastered) {
 			addCandidate(
 				candidates,
 				problem,
@@ -550,7 +662,7 @@ function generateCandidates(anchor: Problem | undefined, model: UserModel) {
 			);
 		}
 
-		if (stats && !accepted && stats.attemptCount > 0) {
+		if (stats && !mastered && stats.attemptCount > 0) {
 			addCandidate(
 				candidates,
 				problem,
@@ -558,11 +670,14 @@ function generateCandidates(anchor: Problem | undefined, model: UserModel) {
 				0.5 +
 					Math.min(
 						0.35,
-						stats.compileCount * 0.04 +
+						(stats.compileCount + (behavior?.compileCount ?? 0)) * 0.04 +
 							stats.failedSubmitCount * 0.08 +
-							(1 - stats.bestPassRate) * 0.2,
+							(1 - stats.bestPassRate) * 0.2 +
+							(1 - skill) * 0.12,
 					),
-				`You have ${stats.compileCount} compiles and a ${Math.round(
+				`Skill score is ${Math.round(skill * 100)}% here after ${
+					stats.compileCount + Math.round(behavior?.compileCount ?? 0)
+				} compiles and a ${Math.round(
 					stats.bestPassRate * 100,
 				)}% best pass rate here.`,
 			);
@@ -574,7 +689,7 @@ function generateCandidates(anchor: Problem | undefined, model: UserModel) {
 				topicStats && topicStats.exposure >= 2 && topicStats.mastery < 0.55
 			);
 		});
-		if (weakTopic && !accepted) {
+		if (weakTopic && !mastered) {
 			const topicStats = model.topicStats.get(topicKey(weakTopic));
 			addCandidate(
 				candidates,
@@ -585,7 +700,7 @@ function generateCandidates(anchor: Problem | undefined, model: UserModel) {
 			);
 		}
 
-		if (!stats && !accepted) {
+		if (!stats) {
 			const seenTopicCount = combinedTopics.filter((topic) =>
 				model.topicStats.has(topicKey(topic)),
 			).length;
@@ -642,6 +757,33 @@ function effortFit(problem: Problem, model: UserModel, readiness: number) {
 	return clamp(baseFit * 0.72 + readiness * 0.28 - fatigue);
 }
 
+function skillScore(
+	stats: ProblemStats | undefined,
+	behavior: BehaviorStats | undefined,
+) {
+	const bestPassRate = stats?.bestPassRate ?? 0;
+	const accepted = stats?.acceptedCount ? 1 : 0;
+	const compilePressure = clamp(
+		((stats?.compileCount ?? 0) + (behavior?.compileCount ?? 0)) / 8,
+	);
+	const failedPressure = clamp((stats?.failedSubmitCount ?? 0) / 4);
+	const idleRatio = clamp(behavior?.idleRatio ?? 0);
+	const pausePressure = clamp((behavior?.pauseCount ?? 0) / 12);
+	const timePressure = clamp((behavior?.activeMs ?? 0) / (45 * 60 * 1000));
+	const trendBonus = clamp(Math.max(0, stats?.passRateTrend ?? 0));
+
+	return clamp(
+		accepted * 0.28 +
+			bestPassRate * 0.34 +
+			trendBonus * 0.12 +
+			(1 - compilePressure) * 0.1 +
+			(1 - failedPressure) * 0.08 +
+			(1 - idleRatio) * 0.04 +
+			(1 - pausePressure) * 0.02 +
+			(1 - timePressure) * 0.04,
+	);
+}
+
 function independentPoolEvidence(pools: CandidatePool[]) {
 	return (
 		1 - pools.reduce((miss, poolItem) => miss * (1 - poolItem.strength), 1)
@@ -655,6 +797,7 @@ function rankCandidate(
 ) {
 	const { problem } = candidate;
 	const stats = model.problemStats.get(problem.id);
+	const behavior = model.behaviorStats.get(problem.id);
 	const eventStats = model.eventCounts.get(problem.id);
 	const review = model.reviewState.get(problem.id);
 	const readiness = prereqReadiness(problem, model);
@@ -664,12 +807,14 @@ function rankCandidate(
 		: 0;
 	const weakFit = weakTopicFit(problem, model);
 	const novelty = stats ? 0.12 : 0.74;
+	const skill = skillScore(stats, behavior);
 	const retryValue =
-		stats && stats.acceptedCount === 0
+		stats && skill < 0.72
 			? clamp(
 					stats.failedSubmitCount * 0.15 +
-						stats.compileCount * 0.05 +
+						(stats.compileCount + (behavior?.compileCount ?? 0)) * 0.05 +
 						(1 - stats.bestPassRate) * 0.36 +
+						(1 - skill) * 0.24 +
 						Math.max(0, stats.passRateTrend) * 0.18,
 				)
 			: 0;
@@ -689,8 +834,8 @@ function rankCandidate(
 				: 0.32;
 	const readinessGate = sigmoid((readiness - difficultyRequirement) * 7);
 	const solvedRecentlyPenalty =
-		stats?.acceptedCount && stats.daysSinceLast < 3
-			? (3 - stats.daysSinceLast) * 0.08
+		stats?.acceptedCount && stats.daysSinceLast < 3 && skill >= 0.72
+			? (3 - stats.daysSinceLast) * 0.08 * skill
 			: 0;
 	const repeatedRecommendationPenalty =
 		eventStats && eventStats.daysSinceLast < 2
@@ -707,6 +852,7 @@ function rankCandidate(
 		difficultyFit * 0.18 +
 		readiness * 0.1 +
 		dueValue * 0.13 +
+		(1 - skill) * 0.1 +
 		Math.max(0, stats?.passRateTrend ?? 0) * 0.07 -
 		solvedRecentlyPenalty -
 		repeatedRecommendationPenalty;
@@ -736,6 +882,13 @@ function rankCandidate(
 			readiness: Number(readiness.toFixed(4)),
 			readinessGate: Number(readinessGate.toFixed(4)),
 			retryValue: Number(retryValue.toFixed(4)),
+			skillScore: Number(skill.toFixed(4)),
+			editorActiveMs: Number((behavior?.activeMs ?? 0).toFixed(0)),
+			editorCompileCount: Number((behavior?.compileCount ?? 0).toFixed(0)),
+			editorIdleRatio: Number((behavior?.idleRatio ?? 0).toFixed(4)),
+			editorMaxPauseMs: Number((behavior?.maxPauseMs ?? 0).toFixed(0)),
+			editorPauseCount: Number((behavior?.pauseCount ?? 0).toFixed(0)),
+			typingSpeedCpm: Number((behavior?.typingSpeedCpm ?? 0).toFixed(2)),
 			weakTopicFit: Number(weakFit.toFixed(4)),
 		},
 		pool: labelPool(bestPool?.name ?? "ranked_pool"),
@@ -748,6 +901,40 @@ function rankCandidate(
 	};
 }
 
+function selectDiverseRecommendations<T extends Recommendation>(
+	ranked: T[],
+	limit: number,
+) {
+	const selected: T[] = [];
+	const deferred: T[] = [];
+	const usedGroups = new Set<string>();
+
+	for (const candidate of ranked) {
+		const group = recommendationGroup(candidate);
+		if (!usedGroups.has(group)) {
+			selected.push(candidate);
+			usedGroups.add(group);
+		} else {
+			deferred.push(candidate);
+		}
+
+		if (selected.length >= limit) {
+			return selected;
+		}
+	}
+
+	for (const candidate of deferred) {
+		if (!selected.some((item) => item.problemId === candidate.problemId)) {
+			selected.push(candidate);
+		}
+		if (selected.length >= limit) {
+			break;
+		}
+	}
+
+	return selected;
+}
+
 export async function localRecommendations(
 	problemId: string,
 	userExternalId = "demo-user",
@@ -755,7 +942,7 @@ export async function localRecommendations(
 ): Promise<Recommendation[]> {
 	const anchor = getProblem(problemId);
 	const model = await buildUserModel(userExternalId);
-	const candidates = generateCandidates(anchor, model)
+	const ranked = generateCandidates(anchor, model)
 		.map((candidate) => rankCandidate(candidate, anchor, model))
 		.sort((left, right) => {
 			if (right.score !== left.score) {
@@ -764,7 +951,7 @@ export async function localRecommendations(
 			return left.title.localeCompare(right.title);
 		});
 
-	return candidates.slice(0, limit).map((candidate) => ({
+	return selectDiverseRecommendations(ranked, limit).map((candidate) => ({
 		...candidate,
 		score: Number(candidate.score.toFixed(4)),
 	}));

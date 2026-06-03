@@ -9,3 +9,5 @@ sentence-transformers==5.2.0
 transformers==4.57.3
 torch==2.9.1
 neo4j==6.0.3
+tree-sitter==0.25.2
+tree-sitter-python==0.25.0

@@ -291,3 +291,68 @@ export const recommendationEvents = pgTable("recommendation_events", {
 		.notNull()
 		.defaultNow(),
 });
+
+export const editorSessions = pgTable("editor_sessions", {
+	id: uuid("id").primaryKey(),
+	userId: uuid("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	problemId: uuid("problem_id")
+		.notNull()
+		.references(() => problems.id, { onDelete: "cascade" }),
+	openedAt: timestamp("opened_at", { withTimezone: true })
+		.notNull()
+		.defaultNow(),
+	lastEventAt: timestamp("last_event_at", { withTimezone: true })
+		.notNull()
+		.defaultNow(),
+	closedAt: timestamp("closed_at", { withTimezone: true }),
+	activeMs: integer("active_ms").notNull().default(0),
+	idleMs: integer("idle_ms").notNull().default(0),
+	focusMs: integer("focus_ms").notNull().default(0),
+	maxPauseMs: integer("max_pause_ms").notNull().default(0),
+	pauseCount: integer("pause_count").notNull().default(0),
+	typingBursts: integer("typing_bursts").notNull().default(0),
+	keystrokeCount: integer("keystroke_count").notNull().default(0),
+	editCount: integer("edit_count").notNull().default(0),
+	pasteCount: integer("paste_count").notNull().default(0),
+	deleteCount: integer("delete_count").notNull().default(0),
+	charsAdded: integer("chars_added").notNull().default(0),
+	charsDeleted: integer("chars_deleted").notNull().default(0),
+	netChars: integer("net_chars").notNull().default(0),
+	compileCount: integer("compile_count").notNull().default(0),
+	submitCount: integer("submit_count").notNull().default(0),
+	clientMetrics: jsonb("client_metrics")
+		.$type<Record<string, unknown>>()
+		.notNull()
+		.default({}),
+	createdAt: timestamp("created_at", { withTimezone: true })
+		.notNull()
+		.defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true })
+		.notNull()
+		.defaultNow(),
+});
+
+export const editorCodeSnapshots = pgTable("editor_code_snapshots", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	sessionId: uuid("session_id")
+		.notNull()
+		.references(() => editorSessions.id, { onDelete: "cascade" }),
+	userId: uuid("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	problemId: uuid("problem_id")
+		.notNull()
+		.references(() => problems.id, { onDelete: "cascade" }),
+	eventType: text("event_type").notNull(),
+	sourceHash: text("source_hash").notNull(),
+	sourceCode: text("source_code").notNull(),
+	codeMetrics: jsonb("code_metrics")
+		.$type<Record<string, unknown>>()
+		.notNull()
+		.default({}),
+	createdAt: timestamp("created_at", { withTimezone: true })
+		.notNull()
+		.defaultNow(),
+});

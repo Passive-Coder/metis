@@ -154,6 +154,45 @@ CREATE TABLE IF NOT EXISTS recommendation_events (
 	created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS editor_sessions (
+	id UUID PRIMARY KEY,
+	user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	problem_id UUID NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
+	opened_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	last_event_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	closed_at TIMESTAMPTZ,
+	active_ms INTEGER NOT NULL DEFAULT 0,
+	idle_ms INTEGER NOT NULL DEFAULT 0,
+	focus_ms INTEGER NOT NULL DEFAULT 0,
+	max_pause_ms INTEGER NOT NULL DEFAULT 0,
+	pause_count INTEGER NOT NULL DEFAULT 0,
+	typing_bursts INTEGER NOT NULL DEFAULT 0,
+	keystroke_count INTEGER NOT NULL DEFAULT 0,
+	edit_count INTEGER NOT NULL DEFAULT 0,
+	paste_count INTEGER NOT NULL DEFAULT 0,
+	delete_count INTEGER NOT NULL DEFAULT 0,
+	chars_added INTEGER NOT NULL DEFAULT 0,
+	chars_deleted INTEGER NOT NULL DEFAULT 0,
+	net_chars INTEGER NOT NULL DEFAULT 0,
+	compile_count INTEGER NOT NULL DEFAULT 0,
+	submit_count INTEGER NOT NULL DEFAULT 0,
+	client_metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS editor_code_snapshots (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	session_id UUID NOT NULL REFERENCES editor_sessions(id) ON DELETE CASCADE,
+	user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	problem_id UUID NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
+	event_type TEXT NOT NULL,
+	source_hash TEXT NOT NULL,
+	source_code TEXT NOT NULL,
+	code_metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS problem_embeddings_statement_hnsw
 	ON problem_embeddings USING hnsw (statement_embedding vector_cosine_ops);
 
@@ -171,6 +210,12 @@ CREATE INDEX IF NOT EXISTS user_problem_attempts_user_problem_idx
 
 CREATE INDEX IF NOT EXISTS user_review_state_due_idx
 	ON user_review_state (user_id, due_at);
+
+CREATE INDEX IF NOT EXISTS editor_sessions_user_problem_idx
+	ON editor_sessions (user_id, problem_id, opened_at DESC);
+
+CREATE INDEX IF NOT EXISTS editor_code_snapshots_session_idx
+	ON editor_code_snapshots (session_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS topic_edges_from_idx
 	ON topic_edges (from_topic_id);

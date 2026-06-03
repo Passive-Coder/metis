@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiRecommendationsRouteImport } from './routes/api/recommendations'
 import { Route as ApiProblemsRouteImport } from './routes/api/problems'
 import { Route as ApiExecuteRouteImport } from './routes/api/execute'
+import { Route as ApiEditorEventsRouteImport } from './routes/api/editor-events'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const IndexRoute = IndexRouteImport.update({
@@ -35,6 +36,11 @@ const ApiExecuteRoute = ApiExecuteRouteImport.update({
   path: '/api/execute',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiEditorEventsRoute = ApiEditorEventsRouteImport.update({
+  id: '/api/editor-events',
+  path: '/api/editor-events',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -43,6 +49,7 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/editor-events': typeof ApiEditorEventsRoute
   '/api/execute': typeof ApiExecuteRoute
   '/api/problems': typeof ApiProblemsRoute
   '/api/recommendations': typeof ApiRecommendationsRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/editor-events': typeof ApiEditorEventsRoute
   '/api/execute': typeof ApiExecuteRoute
   '/api/problems': typeof ApiProblemsRoute
   '/api/recommendations': typeof ApiRecommendationsRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/editor-events': typeof ApiEditorEventsRoute
   '/api/execute': typeof ApiExecuteRoute
   '/api/problems': typeof ApiProblemsRoute
   '/api/recommendations': typeof ApiRecommendationsRoute
@@ -67,6 +76,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/api/editor-events'
     | '/api/execute'
     | '/api/problems'
     | '/api/recommendations'
@@ -74,6 +84,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api/editor-events'
     | '/api/execute'
     | '/api/problems'
     | '/api/recommendations'
@@ -81,6 +92,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/api/editor-events'
     | '/api/execute'
     | '/api/problems'
     | '/api/recommendations'
@@ -89,6 +101,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiEditorEventsRoute: typeof ApiEditorEventsRoute
   ApiExecuteRoute: typeof ApiExecuteRoute
   ApiProblemsRoute: typeof ApiProblemsRoute
   ApiRecommendationsRoute: typeof ApiRecommendationsRoute
@@ -125,6 +138,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiExecuteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/editor-events': {
+      id: '/api/editor-events'
+      path: '/api/editor-events'
+      fullPath: '/api/editor-events'
+      preLoaderRoute: typeof ApiEditorEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -137,6 +157,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiEditorEventsRoute: ApiEditorEventsRoute,
   ApiExecuteRoute: ApiExecuteRoute,
   ApiProblemsRoute: ApiProblemsRoute,
   ApiRecommendationsRoute: ApiRecommendationsRoute,

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from psycopg.types.json import Jsonb
 
 from .clustering import cluster_problem_embeddings
+from .code_features import extract_python_code_features
 from .db import get_connection
 from .encoders import combine_embeddings, encode_problem_statement, encode_solution_code
 from .recommender import ensure_user, recommend
@@ -195,6 +196,7 @@ def recompute_embeddings() -> dict[str, int]:
                 statement_embedding = encode_problem_statement(row)
                 code_embedding = encode_solution_code(row["code"])
                 combined_embedding = combine_embeddings(statement_embedding, code_embedding)
+                code_features = extract_python_code_features(row["code"]).to_dict()
                 cursor.execute(
                     """
                     INSERT INTO problem_embeddings (
@@ -219,6 +221,7 @@ def recompute_embeddings() -> dict[str, int]:
                         code_embedding,
                         combined_embedding,
                         Jsonb({
+                            "ast": code_features,
                             "code_dimensions": len(code_embedding),
                             "code_model": "microsoft/codebert-base",
                             "combined_dimensions": len(combined_embedding),
