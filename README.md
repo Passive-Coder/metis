@@ -80,6 +80,8 @@ The ML server generates candidates from five pools:
 
 Candidates are merged by problem and ranked from actual practice telemetry: compile count, failed submits, best and recent test-pass rate, pass-rate trend over time, accepted history, topic mastery, due review state, difficulty fit, graph readiness, vector similarity, novelty, and recent recommendation exposure. The app returns three clickable coding-problem suggestions after an accepted submit.
 
+The heuristic ranker is the default. Optional learned rankers can be enabled with local artifacts through `RANKER_MODEL=lightgbm`, `lightfm`, `gnn`, or `ensemble`; see [docs/recommendation-ranking.md](docs/recommendation-ranking.md) for the tracked editor behavior features, AST/Tree-sitter disambiguation features, and model artifact contract.
+
 ## Judge0
 
 The app calls `POST /api/execute`, which wraps user Python code in a harness that calls `Solution.<functionName>(*args)`. Compile runs visible tests. Submit runs up to 100 tests and shows recommendations only after every test passes.

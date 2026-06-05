@@ -52,13 +52,31 @@ type EventRow = {
 type SessionRow = {
 	active_ms: number;
 	chars_added: number;
+	chars_deleted: number;
+	chars_per_edit: number;
+	churn_ratio: number;
 	compile_count: number;
+	compile_interval_ms: number;
+	delete_count: number;
+	delete_ratio: number;
+	edit_count: number;
+	edits_per_minute: number;
+	first_compile_latency_ms: number;
+	first_edit_latency_ms: number;
+	first_submit_latency_ms: number;
 	idle_ms: number;
+	keystroke_count: number;
+	keystrokes_per_minute: number;
 	max_pause_ms: number;
+	paste_count: number;
+	paste_ratio: number;
+	pause_density: number;
 	pause_count: number;
 	problem_id: string | null;
 	slug: string;
 	submit_count: number;
+	submit_interval_ms: number;
+	typing_burst_density: number;
 };
 
 type ProblemStats = {
@@ -88,11 +106,25 @@ type ReviewState = {
 
 type BehaviorStats = {
 	activeMs: number;
+	charsPerEdit: number;
+	churnRatio: number;
 	compileCount: number;
+	compileIntervalMs: number;
+	deleteRatio: number;
+	editCount: number;
+	editsPerMinute: number;
+	firstCompileLatencyMs: number;
+	firstEditLatencyMs: number;
+	firstSubmitLatencyMs: number;
 	idleRatio: number;
+	keystrokesPerMinute: number;
 	maxPauseMs: number;
+	pasteRatio: number;
 	pauseCount: number;
+	pauseDensity: number;
 	submitCount: number;
+	submitIntervalMs: number;
+	typingBurstDensity: number;
 	typingSpeedCpm: number;
 };
 
@@ -310,7 +342,25 @@ async function fetchEditorSessionRows(client: Pool, userExternalId: string) {
 		       AVG(editor_session.idle_ms)::float AS idle_ms,
 		       AVG(editor_session.max_pause_ms)::float AS max_pause_ms,
 		       AVG(editor_session.pause_count)::float AS pause_count,
+		       AVG(editor_session.keystroke_count)::float AS keystroke_count,
+		       AVG(editor_session.edit_count)::float AS edit_count,
+		       AVG(editor_session.paste_count)::float AS paste_count,
+		       AVG(editor_session.delete_count)::float AS delete_count,
 		       AVG(editor_session.chars_added)::float AS chars_added,
+		       AVG(editor_session.chars_deleted)::float AS chars_deleted,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,firstEditLatencyMs}', '')::float) AS first_edit_latency_ms,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,firstCompileLatencyMs}', '')::float) AS first_compile_latency_ms,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,firstSubmitLatencyMs}', '')::float) AS first_submit_latency_ms,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,compileIntervalMs}', '')::float) AS compile_interval_ms,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,submitIntervalMs}', '')::float) AS submit_interval_ms,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,editsPerMinute}', '')::float) AS edits_per_minute,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,keystrokesPerMinute}', '')::float) AS keystrokes_per_minute,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,pauseDensity}', '')::float) AS pause_density,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,typingBurstDensity}', '')::float) AS typing_burst_density,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,charsPerEdit}', '')::float) AS chars_per_edit,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,deleteRatio}', '')::float) AS delete_ratio,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,pasteRatio}', '')::float) AS paste_ratio,
+		       AVG(NULLIF(editor_session.client_metrics #>> '{metrics,churnRatio}', '')::float) AS churn_ratio,
 		       SUM(editor_session.compile_count)::float AS compile_count,
 		       SUM(editor_session.submit_count)::float AS submit_count
 		FROM editor_sessions editor_session
@@ -474,14 +524,42 @@ function summarizeBehaviorSessions(rows: SessionRow[]) {
 		const activeMs = Number(row.active_ms) || 0;
 		const idleMs = Number(row.idle_ms) || 0;
 		const charsAdded = Number(row.chars_added) || 0;
+		const charsDeleted = Number(row.chars_deleted) || 0;
+		const editCount = Number(row.edit_count) || 0;
+		const keystrokeCount = Number(row.keystroke_count) || 0;
+		const pauseCount = Number(row.pause_count) || 0;
+		const activeMinutes = Math.max(1 / 60, activeMs / 60000);
 
 		stats.set(problem.id, {
 			activeMs,
+			charsPerEdit:
+				Number(row.chars_per_edit) || charsAdded / Math.max(1, editCount),
+			churnRatio:
+				Number(row.churn_ratio) ||
+				(charsAdded + charsDeleted) /
+					Math.max(1, Math.abs(charsAdded - charsDeleted)),
 			compileCount: Number(row.compile_count) || 0,
+			compileIntervalMs: Number(row.compile_interval_ms) || 0,
+			deleteRatio:
+				Number(row.delete_ratio) ||
+				(Number(row.delete_count) || 0) / Math.max(1, editCount),
+			editCount,
+			editsPerMinute: Number(row.edits_per_minute) || editCount / activeMinutes,
+			firstCompileLatencyMs: Number(row.first_compile_latency_ms) || 0,
+			firstEditLatencyMs: Number(row.first_edit_latency_ms) || 0,
+			firstSubmitLatencyMs: Number(row.first_submit_latency_ms) || 0,
 			idleRatio: idleMs / Math.max(1, activeMs + idleMs),
+			keystrokesPerMinute:
+				Number(row.keystrokes_per_minute) || keystrokeCount / activeMinutes,
 			maxPauseMs: Number(row.max_pause_ms) || 0,
-			pauseCount: Number(row.pause_count) || 0,
+			pasteRatio:
+				Number(row.paste_ratio) ||
+				(Number(row.paste_count) || 0) / Math.max(1, editCount),
+			pauseCount,
+			pauseDensity: Number(row.pause_density) || pauseCount / activeMinutes,
 			submitCount: Number(row.submit_count) || 0,
+			submitIntervalMs: Number(row.submit_interval_ms) || 0,
+			typingBurstDensity: Number(row.typing_burst_density) || 0,
 			typingSpeedCpm: activeMs > 0 ? (charsAdded / activeMs) * 60_000 : 0,
 		});
 	}
@@ -769,18 +847,26 @@ function skillScore(
 	const failedPressure = clamp((stats?.failedSubmitCount ?? 0) / 4);
 	const idleRatio = clamp(behavior?.idleRatio ?? 0);
 	const pausePressure = clamp((behavior?.pauseCount ?? 0) / 12);
+	const pastePressure = clamp((behavior?.pasteRatio ?? 0) * 2);
+	const churnPressure = clamp(Math.max(0, (behavior?.churnRatio ?? 0) - 1) / 5);
+	const firstEditPressure = clamp(
+		(behavior?.firstEditLatencyMs ?? 0) / (10 * 60 * 1000),
+	);
 	const timePressure = clamp((behavior?.activeMs ?? 0) / (45 * 60 * 1000));
 	const trendBonus = clamp(Math.max(0, stats?.passRateTrend ?? 0));
 
 	return clamp(
-		accepted * 0.28 +
-			bestPassRate * 0.34 +
-			trendBonus * 0.12 +
+		accepted * 0.26 +
+			bestPassRate * 0.32 +
+			trendBonus * 0.1 +
 			(1 - compilePressure) * 0.1 +
 			(1 - failedPressure) * 0.08 +
-			(1 - idleRatio) * 0.04 +
+			(1 - idleRatio) * 0.035 +
 			(1 - pausePressure) * 0.02 +
-			(1 - timePressure) * 0.04,
+			(1 - timePressure) * 0.035 +
+			(1 - pastePressure) * 0.015 +
+			(1 - churnPressure) * 0.015 +
+			(1 - firstEditPressure) * 0.015,
 	);
 }
 
@@ -884,10 +970,37 @@ function rankCandidate(
 			retryValue: Number(retryValue.toFixed(4)),
 			skillScore: Number(skill.toFixed(4)),
 			editorActiveMs: Number((behavior?.activeMs ?? 0).toFixed(0)),
+			editorCharsPerEdit: Number((behavior?.charsPerEdit ?? 0).toFixed(2)),
+			editorChurnRatio: Number((behavior?.churnRatio ?? 0).toFixed(4)),
 			editorCompileCount: Number((behavior?.compileCount ?? 0).toFixed(0)),
+			editorCompileIntervalMs: Number(
+				(behavior?.compileIntervalMs ?? 0).toFixed(0),
+			),
+			editorDeleteRatio: Number((behavior?.deleteRatio ?? 0).toFixed(4)),
+			editorEditsPerMinute: Number((behavior?.editsPerMinute ?? 0).toFixed(2)),
+			editorFirstCompileLatencyMs: Number(
+				(behavior?.firstCompileLatencyMs ?? 0).toFixed(0),
+			),
+			editorFirstEditLatencyMs: Number(
+				(behavior?.firstEditLatencyMs ?? 0).toFixed(0),
+			),
+			editorFirstSubmitLatencyMs: Number(
+				(behavior?.firstSubmitLatencyMs ?? 0).toFixed(0),
+			),
 			editorIdleRatio: Number((behavior?.idleRatio ?? 0).toFixed(4)),
+			editorKeystrokesPerMinute: Number(
+				(behavior?.keystrokesPerMinute ?? 0).toFixed(2),
+			),
 			editorMaxPauseMs: Number((behavior?.maxPauseMs ?? 0).toFixed(0)),
+			editorPasteRatio: Number((behavior?.pasteRatio ?? 0).toFixed(4)),
 			editorPauseCount: Number((behavior?.pauseCount ?? 0).toFixed(0)),
+			editorPauseDensity: Number((behavior?.pauseDensity ?? 0).toFixed(2)),
+			editorSubmitIntervalMs: Number(
+				(behavior?.submitIntervalMs ?? 0).toFixed(0),
+			),
+			editorTypingBurstDensity: Number(
+				(behavior?.typingBurstDensity ?? 0).toFixed(2),
+			),
 			typingSpeedCpm: Number((behavior?.typingSpeedCpm ?? 0).toFixed(2)),
 			weakTopicFit: Number(weakFit.toFixed(4)),
 		},

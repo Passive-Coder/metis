@@ -21,6 +21,7 @@
     "db:push": "drizzle-kit push",
     "db:pull": "drizzle-kit pull",
     "db:seed": "tsx scripts/seed-authorized-problems.ts",
+    "leetcode:export": "tsx scripts/export-leetcode-progress.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

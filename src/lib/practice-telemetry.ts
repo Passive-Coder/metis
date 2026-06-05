@@ -32,17 +32,36 @@ type EditorEventType = "open" | "heartbeat" | "compile" | "submit" | "close";
 
 type EditorSessionMetrics = {
 	activeMs?: number;
+	charsPerEdit?: number;
 	charsAdded?: number;
 	charsDeleted?: number;
+	churnRatio?: number;
+	compileIntervalMs?: number;
+	compileRatePerHour?: number;
+	compileRequestCount?: number;
 	deleteCount?: number;
+	deleteRatio?: number;
 	editCount?: number;
+	editsPerMinute?: number;
+	firstCompileLatencyMs?: number;
+	firstEditLatencyMs?: number;
+	firstSubmitLatencyMs?: number;
 	focusMs?: number;
 	idleMs?: number;
 	keystrokeCount?: number;
+	keystrokesPerMinute?: number;
+	lastCompileAtMs?: number;
+	lastSubmitAtMs?: number;
 	maxPauseMs?: number;
 	netChars?: number;
 	pasteCount?: number;
+	pasteRatio?: number;
 	pauseCount?: number;
+	pauseDensity?: number;
+	submitIntervalMs?: number;
+	submitRatePerHour?: number;
+	submitRequestCount?: number;
+	typingBurstDensity?: number;
 	typingBursts?: number;
 };
 

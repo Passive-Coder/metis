@@ -5,6 +5,7 @@ from typing import Any
 
 from .config import settings
 from .db import get_connection
+from .ranker_models import RankerContext, optional_ranker_score
 
 
 @dataclass
@@ -33,30 +34,6 @@ POOL_WEIGHTS = {
     "new_pattern": 0.17,
     "vector_similarity": 0.08,
 }
-
-FEATURE_ORDER = [
-    "accepted_count",
-    "attempt_count",
-    "best_pass_rate",
-    "compile_count",
-    "difficulty_fit",
-    "due_value",
-    "editor_active_ms",
-    "editor_compile_count",
-    "editor_idle_ratio",
-    "editor_pause_count",
-    "editor_submit_count",
-    "error_rate",
-    "learning_value",
-    "max_pause_ms",
-    "pool_weight",
-    "readiness",
-    "retry_value",
-    "semantic_confidence",
-    "skill_score",
-    "typing_speed_cpm",
-    "weak_topic_fit",
-]
 
 DIFFICULTY_LEVEL = {
     "Easy": 0.35,
@@ -515,6 +492,19 @@ def _editor_behavior_features(user_id: str) -> dict[str, dict[str, float]]:
                        AVG(delete_count)::float AS avg_delete_count,
                        AVG(chars_added)::float AS avg_chars_added,
                        AVG(chars_deleted)::float AS avg_chars_deleted,
+                       AVG(NULLIF(client_metrics #>> '{metrics,firstEditLatencyMs}', '')::float) AS avg_first_edit_latency_ms,
+                       AVG(NULLIF(client_metrics #>> '{metrics,firstCompileLatencyMs}', '')::float) AS avg_first_compile_latency_ms,
+                       AVG(NULLIF(client_metrics #>> '{metrics,firstSubmitLatencyMs}', '')::float) AS avg_first_submit_latency_ms,
+                       AVG(NULLIF(client_metrics #>> '{metrics,compileIntervalMs}', '')::float) AS avg_compile_interval_ms,
+                       AVG(NULLIF(client_metrics #>> '{metrics,submitIntervalMs}', '')::float) AS avg_submit_interval_ms,
+                       AVG(NULLIF(client_metrics #>> '{metrics,editsPerMinute}', '')::float) AS avg_edits_per_minute,
+                       AVG(NULLIF(client_metrics #>> '{metrics,keystrokesPerMinute}', '')::float) AS avg_keystrokes_per_minute,
+                       AVG(NULLIF(client_metrics #>> '{metrics,pauseDensity}', '')::float) AS avg_pause_density,
+                       AVG(NULLIF(client_metrics #>> '{metrics,typingBurstDensity}', '')::float) AS avg_typing_burst_density,
+                       AVG(NULLIF(client_metrics #>> '{metrics,charsPerEdit}', '')::float) AS avg_chars_per_edit,
+                       AVG(NULLIF(client_metrics #>> '{metrics,deleteRatio}', '')::float) AS avg_delete_ratio,
+                       AVG(NULLIF(client_metrics #>> '{metrics,pasteRatio}', '')::float) AS avg_paste_ratio,
+                       AVG(NULLIF(client_metrics #>> '{metrics,churnRatio}', '')::float) AS avg_churn_ratio,
                        SUM(compile_count)::float AS editor_compile_count,
                        SUM(submit_count)::float AS editor_submit_count
                 FROM editor_sessions
@@ -543,47 +533,96 @@ def _editor_behavior_features(user_id: str) -> dict[str, dict[str, float]]:
         active_ms = float(row["avg_active_ms"] or 0)
         idle_ms = float(row["avg_idle_ms"] or 0)
         chars_added = float(row["avg_chars_added"] or 0)
+        edit_count = float(row["avg_edit_count"] or 0)
+        keystroke_count = float(row["avg_keystroke_count"] or 0)
+        pause_count = float(row["avg_pause_count"] or 0)
+        typing_bursts = float(row["avg_typing_bursts"] or 0)
+        paste_count = float(row["avg_paste_count"] or 0)
+        delete_count = float(row["avg_delete_count"] or 0)
+        chars_deleted = float(row["avg_chars_deleted"] or 0)
+        elapsed_minutes = max(1.0 / 60.0, active_ms / 60000)
         features[row["problem_uuid"]] = {
             "editor_active_ms": active_ms,
             "editor_chars_added": chars_added,
-            "editor_chars_deleted": float(row["avg_chars_deleted"] or 0),
+            "editor_chars_deleted": chars_deleted,
+            "editor_chars_per_edit": float(row["avg_chars_per_edit"] or 0)
+            or chars_added / max(1.0, edit_count),
+            "editor_churn_ratio": float(row["avg_churn_ratio"] or 0)
+            or (chars_added + chars_deleted) / max(1.0, abs(chars_added - chars_deleted)),
             "editor_compile_count": float(row["editor_compile_count"] or 0),
-            "editor_delete_count": float(row["avg_delete_count"] or 0),
-            "editor_edit_count": float(row["avg_edit_count"] or 0),
+            "editor_compile_interval_ms": float(row["avg_compile_interval_ms"] or 0),
+            "editor_delete_count": delete_count,
+            "editor_delete_ratio": float(row["avg_delete_ratio"] or 0)
+            or delete_count / max(1.0, edit_count),
+            "editor_edit_count": edit_count,
+            "editor_edits_per_minute": float(row["avg_edits_per_minute"] or 0)
+            or edit_count / elapsed_minutes,
+            "editor_first_compile_latency_ms": float(row["avg_first_compile_latency_ms"] or 0),
+            "editor_first_edit_latency_ms": float(row["avg_first_edit_latency_ms"] or 0),
+            "editor_first_submit_latency_ms": float(row["avg_first_submit_latency_ms"] or 0),
             "editor_idle_ms": idle_ms,
             "editor_idle_ratio": idle_ms / max(1.0, active_ms + idle_ms),
-            "editor_keystroke_count": float(row["avg_keystroke_count"] or 0),
+            "editor_keystroke_count": keystroke_count,
+            "editor_keystrokes_per_minute": float(row["avg_keystrokes_per_minute"] or 0)
+            or keystroke_count / elapsed_minutes,
             "editor_max_pause_ms": float(row["avg_max_pause_ms"] or 0),
-            "editor_paste_count": float(row["avg_paste_count"] or 0),
-            "editor_pause_count": float(row["avg_pause_count"] or 0),
+            "editor_paste_count": paste_count,
+            "editor_paste_ratio": float(row["avg_paste_ratio"] or 0)
+            or paste_count / max(1.0, edit_count),
+            "editor_pause_count": pause_count,
+            "editor_pause_density": float(row["avg_pause_density"] or 0)
+            or pause_count / elapsed_minutes,
             "editor_session_count": float(row["session_count"] or 0),
             "editor_submit_count": float(row["editor_submit_count"] or 0),
+            "editor_submit_interval_ms": float(row["avg_submit_interval_ms"] or 0),
+            "editor_typing_burst_density": float(row["avg_typing_burst_density"] or 0)
+            or typing_bursts / elapsed_minutes,
             "typing_speed_cpm": (chars_added / max(1.0, active_ms)) * 60000,
         }
 
     for row in snapshot_rows:
         code_metrics = row["code_metrics"] or {}
         item = features.setdefault(row["problem_uuid"], {})
-        for key in (
-            "assignmentCount",
-            "branchCount",
-            "callCount",
-            "comparisonCount",
-            "comprehensionCount",
-            "lineCount",
-            "loopCount",
-            "maxIndentDepth",
-            "mutationCount",
-            "returnCount",
-            "tokenCount",
-            "tokenEntropy",
-            "uniqueTokenRatio",
-        ):
+        metric_payload = code_metrics.get("metrics") if isinstance(code_metrics.get("metrics"), dict) else {}
+        metric_aliases = {
+            "algorithmDisagreement": "code_algorithm_disagreement",
+            "algorithmSignalCount": "code_algorithm_signal_count",
+            "branchCount": "code_branch_count",
+            "callEntropy": "code_call_entropy",
+            "dataMutationCount": "code_mutation_count",
+            "loopCount": "code_loop_count",
+            "maxAstDepth": "code_ast_depth",
+            "maxIndentDepth": "code_ast_depth",
+            "mutationCount": "code_mutation_count",
+            "parseError": "code_parse_error",
+            "semanticCollisionRisk": "code_semantic_collision_risk",
+            "structureSignalCount": "code_data_structure_signal_count",
+            "treeSitterErrorCount": "code_tree_sitter_error_count",
+        }
+        snake_aliases = {
+            "algorithm_signal_count": "code_algorithm_signal_count",
+            "branch_count": "code_branch_count",
+            "call_entropy": "code_call_entropy",
+            "data_mutation_count": "code_mutation_count",
+            "data_structure_signal_count": "code_data_structure_signal_count",
+            "loop_count": "code_loop_count",
+            "max_ast_depth": "code_ast_depth",
+            "parse_error": "code_parse_error",
+            "semantic_collision_risk": "code_semantic_collision_risk",
+            "tree_sitter_error_count": "code_tree_sitter_error_count",
+        }
+        for key, output_key in metric_aliases.items():
             value = code_metrics.get(key)
             if isinstance(value, (int, float)):
-                item[f"code_{key}"] = float(value)
+                item[output_key] = float(value)
+        for key, output_key in snake_aliases.items():
+            value = metric_payload.get(key) or code_metrics.get(key)
+            if isinstance(value, (int, float)):
+                item[output_key] = float(value)
 
         hints = code_metrics.get("algorithmHints") or {}
+        if not hints and isinstance(code_metrics.get("algorithm_hints"), dict):
+            hints = code_metrics.get("algorithm_hints") or {}
         if isinstance(hints, dict):
             item["semantic_confidence"] = float(sum(1 for value in hints.values() if value)) / max(1.0, len(hints))
 
@@ -597,62 +636,25 @@ def _skill_score(attempt: dict[str, float], behavior: dict[str, float]) -> float
     failed_pressure = _clamp(attempt.get("failed_submit_count", 0.0) / 4.0)
     idle_ratio = _clamp(behavior.get("editor_idle_ratio", 0.0))
     pause_pressure = _clamp(behavior.get("editor_pause_count", 0.0) / 12.0)
+    paste_pressure = _clamp(behavior.get("editor_paste_ratio", 0.0) * 2.0)
+    churn_pressure = _clamp(max(0.0, behavior.get("editor_churn_ratio", 0.0) - 1.0) / 5.0)
+    first_edit_pressure = _clamp(behavior.get("editor_first_edit_latency_ms", 0.0) / (10 * 60 * 1000))
     time_pressure = _clamp(behavior.get("editor_active_ms", 0.0) / (45 * 60 * 1000))
     trend_bonus = _clamp(max(0.0, attempt.get("pass_rate_trend", 0.0)))
 
     return _clamp(
-        accepted * 0.28
-        + best_pass_rate * 0.34
-        + trend_bonus * 0.12
+        accepted * 0.26
+        + best_pass_rate * 0.32
+        + trend_bonus * 0.1
         + (1 - compile_pressure) * 0.1
         + (1 - failed_pressure) * 0.08
-        + (1 - idle_ratio) * 0.04
+        + (1 - idle_ratio) * 0.035
         + (1 - pause_pressure) * 0.02
-        + (1 - time_pressure) * 0.04
+        + (1 - time_pressure) * 0.035
+        + (1 - paste_pressure) * 0.015
+        + (1 - churn_pressure) * 0.015
+        + (1 - first_edit_pressure) * 0.015
     )
-
-
-def _feature_vector(features: dict[str, float]) -> list[float]:
-    return [float(features.get(name, 0.0)) for name in FEATURE_ORDER]
-
-
-def _optional_model_score(features: dict[str, float]) -> float | None:
-    model_name = (settings.ranker_model or "heuristic").lower()
-    if model_name == "heuristic":
-        return None
-
-    vector = _feature_vector(features)
-    try:
-        if model_name == "lightgbm" and settings.lightgbm_model_path:
-            import lightgbm as lgb  # type: ignore
-
-            model = lgb.Booster(model_file=settings.lightgbm_model_path)
-            return float(model.predict([vector])[0])
-
-        if model_name == "lightfm" and settings.lightfm_model_path:
-            # LightFM is trained offline on implicit user-item interactions plus
-            # user/item metadata. Runtime scoring needs a user/item id mapping,
-            # so this hook intentionally consumes artifacts only when supplied.
-            import pickle
-
-            with open(settings.lightfm_model_path, "rb") as file:
-                payload = pickle.load(file)
-            scorer = payload.get("score")
-            if callable(scorer):
-                return float(scorer(features))
-
-        if model_name == "gnn" and settings.gnn_model_path:
-            import torch
-
-            model = torch.jit.load(settings.gnn_model_path)
-            model.eval()
-            with torch.no_grad():
-                tensor = torch.tensor([vector], dtype=torch.float32)
-                return float(model(tensor).reshape(-1)[0].item())
-    except Exception as error:
-        print(f"Ranker model fallback: {error}")
-
-    return None
 
 
 def _topic_mastery(user_id: str) -> dict[str, float]:
@@ -828,7 +830,12 @@ def _select_diverse_candidates(candidates: list[Candidate], limit: int) -> list[
     return selected
 
 
-def rank_candidates(candidates: list[Candidate], limit: int, user_id: str) -> list[dict[str, Any]]:
+def rank_candidates(
+    candidates: list[Candidate],
+    limit: int,
+    user_id: str,
+    user_external_id: str,
+) -> list[dict[str, Any]]:
     attempts = _attempt_features(user_id)
     behavior_features = _editor_behavior_features(user_id)
     topic_mastery = _topic_mastery(user_id)
@@ -916,8 +923,22 @@ def rank_candidates(candidates: list[Candidate], limit: int, user_id: str) -> li
             "typing_speed_cpm": behavior.get("typing_speed_cpm", 0.0),
             "weak_topic_fit": weak_fit,
         }
-        model_score = _optional_model_score(model_features)
-        score = _clamp(base_rank_score if model_score is None else base_rank_score * 0.35 + _clamp(model_score) * 0.65)
+        ranker_score = optional_ranker_score(
+            RankerContext(
+                features=model_features,
+                problem_external_id=candidate.problem_id,
+                problem_uuid=candidate.problem_uuid,
+                user_external_id=user_external_id,
+                user_uuid=user_id,
+            )
+        )
+        model_score = ranker_score.score if ranker_score is not None else None
+        model_blend = _clamp(settings.ranker_model_blend)
+        score = _clamp(
+            base_rank_score
+            if model_score is None
+            else base_rank_score * (1 - model_blend) + _clamp(model_score) * model_blend
+        )
 
         candidate.features["pool_weight"] = weight
         candidate.features["pool_evidence"] = pool_evidence
@@ -932,11 +953,29 @@ def rank_candidates(candidates: list[Candidate], limit: int, user_id: str) -> li
         candidate.features["retry_value"] = retry_value
         candidate.features["skill_score"] = skill_score
         candidate.features["editor_active_ms"] = behavior.get("editor_active_ms", 0.0)
+        candidate.features["editor_chars_per_edit"] = behavior.get("editor_chars_per_edit", 0.0)
+        candidate.features["editor_churn_ratio"] = behavior.get("editor_churn_ratio", 0.0)
         candidate.features["editor_compile_count"] = behavior.get("editor_compile_count", 0.0)
+        candidate.features["editor_compile_interval_ms"] = behavior.get("editor_compile_interval_ms", 0.0)
+        candidate.features["editor_delete_ratio"] = behavior.get("editor_delete_ratio", 0.0)
+        candidate.features["editor_edits_per_minute"] = behavior.get("editor_edits_per_minute", 0.0)
+        candidate.features["editor_first_compile_latency_ms"] = behavior.get("editor_first_compile_latency_ms", 0.0)
+        candidate.features["editor_first_edit_latency_ms"] = behavior.get("editor_first_edit_latency_ms", 0.0)
+        candidate.features["editor_first_submit_latency_ms"] = behavior.get("editor_first_submit_latency_ms", 0.0)
         candidate.features["editor_idle_ratio"] = behavior.get("editor_idle_ratio", 0.0)
+        candidate.features["editor_keystrokes_per_minute"] = behavior.get("editor_keystrokes_per_minute", 0.0)
+        candidate.features["editor_max_pause_ms"] = behavior.get("editor_max_pause_ms", 0.0)
         candidate.features["editor_pause_count"] = behavior.get("editor_pause_count", 0.0)
+        candidate.features["editor_pause_density"] = behavior.get("editor_pause_density", 0.0)
+        candidate.features["editor_paste_ratio"] = behavior.get("editor_paste_ratio", 0.0)
+        candidate.features["editor_submit_interval_ms"] = behavior.get("editor_submit_interval_ms", 0.0)
+        candidate.features["editor_typing_burst_density"] = behavior.get("editor_typing_burst_density", 0.0)
         candidate.features["semantic_confidence"] = behavior.get("semantic_confidence", 0.0)
         candidate.features["ranker_model_score"] = model_score if model_score is not None else -1.0
+        candidate.features["ranker_model_used"] = 1.0 if ranker_score is not None else 0.0
+        if ranker_score is not None:
+            for name, component_score in ranker_score.components.items():
+                candidate.features[f"ranker_{name}_score"] = component_score
         candidate.features["weak_topic_fit"] = weak_fit
         candidate.features["ranked_score"] = score
 
@@ -979,4 +1018,4 @@ def recommend(user_external_id: str, anchor_problem_id: str | None, limit: int =
     candidates.extend(vector_pools(user_id, anchor_problem_uuid, anchor, pool_limit))
     candidates.extend(spaced_repetition_pool(user_id, pool_limit))
     candidates.extend(new_pattern_pool(user_id, anchor_problem_uuid, pool_limit))
-    return rank_candidates(candidates, limit, user_id)
+    return rank_candidates(candidates, limit, user_id, user_external_id)

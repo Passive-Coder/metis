@@ -153,15 +153,24 @@ type EditorMetrics = {
 	activeMs: number;
 	charsAdded: number;
 	charsDeleted: number;
+	compileIntervalMs: number;
+	compileRequestCount: number;
 	deleteCount: number;
 	editCount: number;
+	firstCompileLatencyMs: number;
+	firstEditLatencyMs: number;
+	firstSubmitLatencyMs: number;
 	focusMs: number;
 	idleMs: number;
 	keystrokeCount: number;
+	lastCompileAtMs: number;
+	lastSubmitAtMs: number;
 	maxPauseMs: number;
 	netChars: number;
 	pasteCount: number;
 	pauseCount: number;
+	submitIntervalMs: number;
+	submitRequestCount: number;
 	typingBursts: number;
 };
 
@@ -174,15 +183,24 @@ function emptyEditorMetrics(): EditorMetrics {
 		activeMs: 0,
 		charsAdded: 0,
 		charsDeleted: 0,
+		compileIntervalMs: 0,
+		compileRequestCount: 0,
 		deleteCount: 0,
 		editCount: 0,
+		firstCompileLatencyMs: 0,
+		firstEditLatencyMs: 0,
+		firstSubmitLatencyMs: 0,
 		focusMs: 0,
 		idleMs: 0,
 		keystrokeCount: 0,
+		lastCompileAtMs: 0,
+		lastSubmitAtMs: 0,
 		maxPauseMs: 0,
 		netChars: 0,
 		pasteCount: 0,
 		pauseCount: 0,
+		submitIntervalMs: 0,
+		submitRequestCount: 0,
 		typingBursts: 0,
 	};
 }
@@ -289,10 +307,45 @@ function Home() {
 		const elapsedMs = sessionStartedAtRef.current
 			? Date.now() - sessionStartedAtRef.current
 			: 0;
+		const activeMinutes = Math.max(1 / 60, metrics.activeMs / 60000);
+		const elapsedHours = Math.max(1 / 3600, elapsedMs / 3600000);
+		const churn = metrics.charsAdded + metrics.charsDeleted;
 		return {
 			...metrics,
+			charsPerEdit:
+				metrics.editCount > 0
+					? Number((metrics.charsAdded / metrics.editCount).toFixed(2))
+					: 0,
+			churnRatio:
+				metrics.netChars > 0
+					? Number((churn / metrics.netChars).toFixed(4))
+					: churn > 0
+						? 1
+						: 0,
+			compileRatePerHour: Number(
+				(metrics.compileRequestCount / elapsedHours).toFixed(4),
+			),
+			deleteRatio:
+				metrics.editCount > 0
+					? Number((metrics.deleteCount / metrics.editCount).toFixed(4))
+					: 0,
+			editsPerMinute: Number((metrics.editCount / activeMinutes).toFixed(4)),
 			elapsedMs,
 			focusMs: metrics.activeMs,
+			keystrokesPerMinute: Number(
+				(metrics.keystrokeCount / activeMinutes).toFixed(4),
+			),
+			pasteRatio:
+				metrics.editCount > 0
+					? Number((metrics.pasteCount / metrics.editCount).toFixed(4))
+					: 0,
+			pauseDensity: Number((metrics.pauseCount / activeMinutes).toFixed(4)),
+			submitRatePerHour: Number(
+				(metrics.submitRequestCount / elapsedHours).toFixed(4),
+			),
+			typingBurstDensity: Number(
+				(metrics.typingBursts / activeMinutes).toFixed(4),
+			),
 			typingSpeedCpm:
 				metrics.activeMs > 0
 					? Math.round((metrics.charsAdded / metrics.activeMs) * 60000)
@@ -313,6 +366,38 @@ function Home() {
 			const activeProblemId = options.problemId ?? sessionProblemIdRef.current;
 			if (!sessionId || !activeProblemId) {
 				return Promise.resolve();
+			}
+			const elapsedMs = sessionStartedAtRef.current
+				? Date.now() - sessionStartedAtRef.current
+				: 0;
+			const metrics = metricsRef.current;
+			if (eventType === "compile") {
+				metrics.compileRequestCount += 1;
+				if (metrics.firstCompileLatencyMs === 0) {
+					metrics.firstCompileLatencyMs = elapsedMs;
+				}
+				if (metrics.lastCompileAtMs > 0) {
+					const interval = elapsedMs - metrics.lastCompileAtMs;
+					metrics.compileIntervalMs =
+						metrics.compileIntervalMs > 0
+							? Math.round((metrics.compileIntervalMs + interval) / 2)
+							: interval;
+				}
+				metrics.lastCompileAtMs = elapsedMs;
+			}
+			if (eventType === "submit") {
+				metrics.submitRequestCount += 1;
+				if (metrics.firstSubmitLatencyMs === 0) {
+					metrics.firstSubmitLatencyMs = elapsedMs;
+				}
+				if (metrics.lastSubmitAtMs > 0) {
+					const interval = elapsedMs - metrics.lastSubmitAtMs;
+					metrics.submitIntervalMs =
+						metrics.submitIntervalMs > 0
+							? Math.round((metrics.submitIntervalMs + interval) / 2)
+							: interval;
+				}
+				metrics.lastSubmitAtMs = elapsedMs;
 			}
 
 			return fetch("/api/editor-events", {
@@ -456,6 +541,9 @@ function Home() {
 		const now = Date.now();
 		const metrics = metricsRef.current;
 		const gap = lastEditAtRef.current > 0 ? now - lastEditAtRef.current : 0;
+		if (metrics.firstEditLatencyMs === 0 && sessionStartedAtRef.current) {
+			metrics.firstEditLatencyMs = now - sessionStartedAtRef.current;
+		}
 
 		if (gap > 0) {
 			if (gap > pauseThresholdMs) {
@@ -685,7 +773,10 @@ function Home() {
 							</div>
 							<Separator />
 							<div className="grid gap-3">
-								<InfoLine label="Function" value={selectedProblem.functionName} />
+								<InfoLine
+									label="Function"
+									value={selectedProblem.functionName}
+								/>
 								<InfoLine
 									label="Visible tests"
 									value={`${selectedProblem.testCases.length}/${selectedProblem.totalTestCases}`}
@@ -768,8 +859,8 @@ function Home() {
 					}
 				}}
 			/>
-			<section className="mx-auto grid h-[calc(100svh-73px)] w-full max-w-[1600px] grid-cols-1 gap-4 px-4 py-4 md:px-6 xl:grid-cols-[410px_minmax(0,1fr)_390px]">
-				<Card className="min-h-0 overflow-hidden py-0">
+			<section className="mx-auto grid min-h-[calc(100svh-73px)] w-full max-w-[1600px] grid-cols-1 gap-4 px-4 py-4 md:px-6 xl:h-[calc(100svh-73px)] xl:grid-cols-[410px_minmax(0,1fr)_390px]">
+				<Card className="overflow-hidden py-0 xl:min-h-0">
 					<CardHeader className="border-b px-5 py-4">
 						<div className="flex items-start justify-between gap-3">
 							<div className="space-y-2">
@@ -789,7 +880,7 @@ function Home() {
 							</div>
 						</div>
 					</CardHeader>
-					<ScrollArea className="h-full min-h-0">
+					<ScrollArea className="xl:h-full xl:min-h-0">
 						<CardContent className="space-y-6 px-5 py-5">
 							<ProblemSection title="Prompt">
 								<p className="text-sm leading-6 text-muted-foreground">
@@ -798,7 +889,10 @@ function Home() {
 							</ProblemSection>
 							<ProblemSection title="Contract">
 								<div className="grid gap-4">
-									<InfoLine label="Input" value={selectedProblem.inputContract} />
+									<InfoLine
+										label="Input"
+										value={selectedProblem.inputContract}
+									/>
 									<InfoLine
 										label="Output"
 										value={selectedProblem.outputContract}
@@ -832,19 +926,20 @@ function Home() {
 
 				<div className="grid min-h-[620px] min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-4 xl:min-h-0">
 					<Card className="py-0">
-						<CardContent className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+						<CardContent className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
 							<div className="min-w-0">
 								<div className="flex items-center gap-2 text-sm text-muted-foreground">
 									<Code2 className="size-4" />
 									Python 3
 								</div>
-								<h2 className="truncate text-lg font-semibold">
+								<h2 className="truncate text-base font-semibold sm:text-lg">
 									Solution.{selectedProblem.functionName}
 								</h2>
 							</div>
-							<div className="flex flex-wrap gap-2">
+							<div className="flex flex-wrap gap-2 md:flex-nowrap md:justify-end">
 								<Button
 									onClick={() => handleCodeChange(selectedProblem.starterCode)}
+									size="sm"
 									type="button"
 									variant="outline"
 								>
@@ -854,6 +949,7 @@ function Home() {
 								<Button
 									disabled={isRunning}
 									onClick={() => execute("compile")}
+									size="sm"
 									type="button"
 									variant="secondary"
 								>
@@ -867,6 +963,7 @@ function Home() {
 								<Button
 									disabled={isRunning}
 									onClick={() => execute("submit")}
+									size="sm"
 									type="button"
 								>
 									{activeMode === "submit" ? (
@@ -1230,7 +1327,9 @@ function RunResultPanel({
 					<Separator />
 					<div className="space-y-1">
 						<div className="flex items-center justify-between gap-3">
-							<Badge variant="outline">{sourceLabel(activeAssistance.source)}</Badge>
+							<Badge variant="outline">
+								{sourceLabel(activeAssistance.source)}
+							</Badge>
 							<span className="text-xs text-muted-foreground">
 								{failedCompileStreak} failed compiles
 							</span>

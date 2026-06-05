@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     code_model_name: str = "microsoft/codebert-base"
     allow_hash_fallback: bool = True
     ranker_model: str = "heuristic"
+    ranker_model_blend: float = 0.65
+    ranker_ensemble_weights: str = "lightgbm:0.45,lightfm:0.25,gnn:0.30"
     lightgbm_model_path: str | None = None
     lightfm_model_path: str | None = None
     gnn_model_path: str | None = None

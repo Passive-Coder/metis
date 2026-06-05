@@ -1,0 +1,878 @@
+{
+  "auth": {
+    "usedCsrfToken": false,
+    "usedSessionCookie": false
+  },
+  "exportedAt": "2026-06-04T11:30:21.632Z",
+  "source": "https://leetcode.com/progress/",
+  "username": "Passive_User",
+  "year": 2026,
+  "progress": {
+    "numAcceptedQuestions": [
+      {
+        "count": 41,
+        "difficulty": "EASY"
+      },
+      {
+        "count": 39,
+        "difficulty": "MEDIUM"
+      },
+      {
+        "count": 3,
+        "difficulty": "HARD"
+      }
+    ],
+    "numFailedQuestions": [
+      {
+        "count": 0,
+        "difficulty": "EASY"
+      },
+      {
+        "count": 6,
+        "difficulty": "MEDIUM"
+      },
+      {
+        "count": 4,
+        "difficulty": "HARD"
+      }
+    ],
+    "numUntouchedQuestions": [
+      {
+        "count": 906,
+        "difficulty": "EASY"
+      },
+      {
+        "count": 2018,
+        "difficulty": "MEDIUM"
+      },
+      {
+        "count": 932,
+        "difficulty": "HARD"
+      }
+    ],
+    "userSessionBeatsPercentage": [
+      {
+        "difficulty": "EASY",
+        "percentage": 71.66
+      },
+      {
+        "difficulty": "MEDIUM",
+        "percentage": 69.53
+      },
+      {
+        "difficulty": "HARD",
+        "percentage": 32.35
+      }
+    ]
+  },
+  "solvedStats": {
+    "acSubmissionNum": [
+      {
+        "difficulty": "All",
+        "count": 83,
+        "submissions": 124
+      },
+      {
+        "difficulty": "Easy",
+        "count": 41,
+        "submissions": 67
+      },
+      {
+        "difficulty": "Medium",
+        "count": 39,
+        "submissions": 53
+      },
+      {
+        "difficulty": "Hard",
+        "count": 3,
+        "submissions": 4
+      }
+    ],
+    "totalSubmissionNum": [
+      {
+        "difficulty": "All",
+        "count": 93,
+        "submissions": 311
+      },
+      {
+        "difficulty": "Easy",
+        "count": 41,
+        "submissions": 123
+      },
+      {
+        "difficulty": "Medium",
+        "count": 45,
+        "submissions": 165
+      },
+      {
+        "difficulty": "Hard",
+        "count": 7,
+        "submissions": 23
+      }
+    ]
+  },
+  "calendar": {
+    "activeYears": [
+      2024,
+      2025,
+      2026
+    ],
+    "streak": 1,
+    "totalActiveDays": 3,
+    "dccBadges": [],
+    "submissionCalendar": "{\"1773792000\": 3, \"1778889600\": 3, \"1779494400\": 6}"
+  },
+  "recentAcceptedSubmissions": [
+    {
+      "id": "2010916562",
+      "title": "Non-overlapping Intervals",
+      "titleSlug": "non-overlapping-intervals",
+      "timestamp": "1779550587"
+    },
+    {
+      "id": "2010909764",
+      "title": "Merge Intervals",
+      "titleSlug": "merge-intervals",
+      "timestamp": "1779550301"
+    },
+    {
+      "id": "2010853332",
+      "title": "Two Sum",
+      "titleSlug": "two-sum",
+      "timestamp": "1779548348"
+    },
+    {
+      "id": "2004278620",
+      "title": "Find Minimum in Rotated Sorted Array",
+      "titleSlug": "find-minimum-in-rotated-sorted-array",
+      "timestamp": "1778908171"
+    },
+    {
+      "id": "2004274074",
+      "title": "Find Minimum in Rotated Sorted Array II",
+      "titleSlug": "find-minimum-in-rotated-sorted-array-ii",
+      "timestamp": "1778907768"
+    },
+    {
+      "id": "1952023374",
+      "title": "Count Submatrices with Top-Left Element and Sum Less Than k",
+      "titleSlug": "count-submatrices-with-top-left-element-and-sum-less-than-k",
+      "timestamp": "1773831348"
+    },
+    {
+      "id": "1808534071",
+      "title": "Adjacent Increasing Subarrays Detection I",
+      "titleSlug": "adjacent-increasing-subarrays-detection-i",
+      "timestamp": "1761139617"
+    },
+    {
+      "id": "1804061031",
+      "title": "Adjacent Increasing Subarrays Detection II",
+      "titleSlug": "adjacent-increasing-subarrays-detection-ii",
+      "timestamp": "1760688495"
+    },
+    {
+      "id": "1803530525",
+      "title": "Smallest Missing Non-negative Integer After Operations",
+      "titleSlug": "smallest-missing-non-negative-integer-after-operations",
+      "timestamp": "1760632055"
+    },
+    {
+      "id": "1789966474",
+      "title": "Balanced Binary Tree",
+      "titleSlug": "balanced-binary-tree",
+      "timestamp": "1759479655"
+    },
+    {
+      "id": "1789955725",
+      "title": "Symmetric Tree",
+      "titleSlug": "symmetric-tree",
+      "timestamp": "1759478685"
+    },
+    {
+      "id": "1789941558",
+      "title": "Same Tree",
+      "titleSlug": "same-tree",
+      "timestamp": "1759477372"
+    },
+    {
+      "id": "1762981221",
+      "title": "Remove Linked List Elements",
+      "titleSlug": "remove-linked-list-elements",
+      "timestamp": "1757268687"
+    },
+    {
+      "id": "1762965567",
+      "title": "Palindrome Linked List",
+      "titleSlug": "palindrome-linked-list",
+      "timestamp": "1757267823"
+    },
+    {
+      "id": "1762948510",
+      "title": "Linked List Cycle",
+      "titleSlug": "linked-list-cycle",
+      "timestamp": "1757266923"
+    },
+    {
+      "id": "1733903845",
+      "title": "Power of Three",
+      "titleSlug": "power-of-three",
+      "timestamp": "1755099238"
+    }
+  ],
+  "languageStats": [
+    {
+      "languageName": "C++",
+      "problemsSolved": 3
+    },
+    {
+      "languageName": "Java",
+      "problemsSolved": 4
+    },
+    {
+      "languageName": "Python",
+      "problemsSolved": 43
+    },
+    {
+      "languageName": "C",
+      "problemsSolved": 8
+    },
+    {
+      "languageName": "JavaScript",
+      "problemsSolved": 1
+    },
+    {
+      "languageName": "Python3",
+      "problemsSolved": 27
+    }
+  ],
+  "skillStats": {
+    "advanced": [
+      {
+        "tagName": "Backtracking",
+        "tagSlug": "backtracking",
+        "problemsSolved": 1
+      },
+      {
+        "tagName": "Dynamic Programming",
+        "tagSlug": "dynamic-programming",
+        "problemsSolved": 7
+      },
+      {
+        "tagName": "Divide and Conquer",
+        "tagSlug": "divide-and-conquer",
+        "problemsSolved": 1
+      },
+      {
+        "tagName": "Trie",
+        "tagSlug": "trie",
+        "problemsSolved": 1
+      },
+      {
+        "tagName": "Segment Tree",
+        "tagSlug": "segment-tree",
+        "problemsSolved": 1
+      }
+    ],
+    "intermediate": [
+      {
+        "tagName": "Tree",
+        "tagSlug": "tree",
+        "problemsSolved": 3
+      },
+      {
+        "tagName": "Binary Tree",
+        "tagSlug": "binary-tree",
+        "problemsSolved": 3
+      },
+      {
+        "tagName": "Hash Table",
+        "tagSlug": "hash-table",
+        "problemsSolved": 17
+      },
+      {
+        "tagName": "Ordered Set",
+        "tagSlug": "ordered-set",
+        "problemsSolved": 1
+      },
+      {
+        "tagName": "Greedy",
+        "tagSlug": "greedy",
+        "problemsSolved": 7
+      },
+      {
+        "tagName": "Binary Search",
+        "tagSlug": "binary-search",
+        "problemsSolved": 12
+      },
+      {
+        "tagName": "Depth-First Search",
+        "tagSlug": "depth-first-search",
+        "problemsSolved": 3
+      },
+      {
+        "tagName": "Breadth-First Search",
+        "tagSlug": "breadth-first-search",
+        "problemsSolved": 2
+      },
+      {
+        "tagName": "Recursion",
+        "tagSlug": "recursion",
+        "problemsSolved": 7
+      },
+      {
+        "tagName": "Sliding Window",
+        "tagSlug": "sliding-window",
+        "problemsSolved": 6
+      },
+      {
+        "tagName": "Bit Manipulation",
+        "tagSlug": "bit-manipulation",
+        "problemsSolved": 5
+      },
+      {
+        "tagName": "Math",
+        "tagSlug": "math",
+        "problemsSolved": 17
+      },
+      {
+        "tagName": "Design",
+        "tagSlug": "design",
+        "problemsSolved": 1
+      }
+    ],
+    "fundamental": [
+      {
+        "tagName": "Array",
+        "tagSlug": "array",
+        "problemsSolved": 44
+      },
+      {
+        "tagName": "Matrix",
+        "tagSlug": "matrix",
+        "problemsSolved": 4
+      },
+      {
+        "tagName": "String",
+        "tagSlug": "string",
+        "problemsSolved": 25
+      },
+      {
+        "tagName": "Simulation",
+        "tagSlug": "simulation",
+        "problemsSolved": 5
+      },
+      {
+        "tagName": "Sorting",
+        "tagSlug": "sorting",
+        "problemsSolved": 9
+      },
+      {
+        "tagName": "Stack",
+        "tagSlug": "stack",
+        "problemsSolved": 3
+      },
+      {
+        "tagName": "Queue",
+        "tagSlug": "queue",
+        "problemsSolved": 1
+      },
+      {
+        "tagName": "Linked List",
+        "tagSlug": "linked-list",
+        "problemsSolved": 6
+      },
+      {
+        "tagName": "Two Pointers",
+        "tagSlug": "two-pointers",
+        "problemsSolved": 19
+      }
+    ]
+  },
+  "contest": {
+    "ranking": null,
+    "rankingHistory": []
+  },
+  "publicProfile": {
+    "username": "Passive_User",
+    "githubUrl": null,
+    "twitterUrl": null,
+    "linkedinUrl": null,
+    "profile": {
+      "ranking": 1773093,
+      "userAvatar": "https://assets.leetcode.com/users/Passive_User/avatar_1729093862.png",
+      "realName": "Sree Raj Muthaiya",
+      "aboutMe": "I am a rookie who knows to code",
+      "school": null,
+      "websites": [],
+      "countryName": null,
+      "company": null,
+      "jobTitle": null,
+      "skillTags": [
+        "Python"
+      ]
+    }
+  },
+  "rawOperations": {
+    "userProfileUserQuestionProgressV2": {
+      "data": {
+        "userProfileUserQuestionProgressV2": {
+          "numAcceptedQuestions": [
+            {
+              "count": 41,
+              "difficulty": "EASY"
+            },
+            {
+              "count": 39,
+              "difficulty": "MEDIUM"
+            },
+            {
+              "count": 3,
+              "difficulty": "HARD"
+            }
+          ],
+          "numFailedQuestions": [
+            {
+              "count": 0,
+              "difficulty": "EASY"
+            },
+            {
+              "count": 6,
+              "difficulty": "MEDIUM"
+            },
+            {
+              "count": 4,
+              "difficulty": "HARD"
+            }
+          ],
+          "numUntouchedQuestions": [
+            {
+              "count": 906,
+              "difficulty": "EASY"
+            },
+            {
+              "count": 2018,
+              "difficulty": "MEDIUM"
+            },
+            {
+              "count": 932,
+              "difficulty": "HARD"
+            }
+          ],
+          "userSessionBeatsPercentage": [
+            {
+              "difficulty": "EASY",
+              "percentage": 71.66
+            },
+            {
+              "difficulty": "MEDIUM",
+              "percentage": 69.53
+            },
+            {
+              "difficulty": "HARD",
+              "percentage": 32.35
+            }
+          ]
+        }
+      },
+      "ok": true,
+      "status": 200
+    },
+    "userProblemsSolved": {
+      "data": {
+        "matchedUser": {
+          "submitStats": {
+            "acSubmissionNum": [
+              {
+                "difficulty": "All",
+                "count": 83,
+                "submissions": 124
+              },
+              {
+                "difficulty": "Easy",
+                "count": 41,
+                "submissions": 67
+              },
+              {
+                "difficulty": "Medium",
+                "count": 39,
+                "submissions": 53
+              },
+              {
+                "difficulty": "Hard",
+                "count": 3,
+                "submissions": 4
+              }
+            ],
+            "totalSubmissionNum": [
+              {
+                "difficulty": "All",
+                "count": 93,
+                "submissions": 311
+              },
+              {
+                "difficulty": "Easy",
+                "count": 41,
+                "submissions": 123
+              },
+              {
+                "difficulty": "Medium",
+                "count": 45,
+                "submissions": 165
+              },
+              {
+                "difficulty": "Hard",
+                "count": 7,
+                "submissions": 23
+              }
+            ]
+          }
+        }
+      },
+      "ok": true,
+      "status": 200
+    },
+    "userProfileCalendar": {
+      "data": {
+        "matchedUser": {
+          "userCalendar": {
+            "activeYears": [
+              2024,
+              2025,
+              2026
+            ],
+            "streak": 1,
+            "totalActiveDays": 3,
+            "dccBadges": [],
+            "submissionCalendar": "{\"1773792000\": 3, \"1778889600\": 3, \"1779494400\": 6}"
+          }
+        }
+      },
+      "ok": true,
+      "status": 200
+    },
+    "recentAcSubmissions": {
+      "data": {
+        "recentAcSubmissionList": [
+          {
+            "id": "2010916562",
+            "title": "Non-overlapping Intervals",
+            "titleSlug": "non-overlapping-intervals",
+            "timestamp": "1779550587"
+          },
+          {
+            "id": "2010909764",
+            "title": "Merge Intervals",
+            "titleSlug": "merge-intervals",
+            "timestamp": "1779550301"
+          },
+          {
+            "id": "2010853332",
+            "title": "Two Sum",
+            "titleSlug": "two-sum",
+            "timestamp": "1779548348"
+          },
+          {
+            "id": "2004278620",
+            "title": "Find Minimum in Rotated Sorted Array",
+            "titleSlug": "find-minimum-in-rotated-sorted-array",
+            "timestamp": "1778908171"
+          },
+          {
+            "id": "2004274074",
+            "title": "Find Minimum in Rotated Sorted Array II",
+            "titleSlug": "find-minimum-in-rotated-sorted-array-ii",
+            "timestamp": "1778907768"
+          },
+          {
+            "id": "1952023374",
+            "title": "Count Submatrices with Top-Left Element and Sum Less Than k",
+            "titleSlug": "count-submatrices-with-top-left-element-and-sum-less-than-k",
+            "timestamp": "1773831348"
+          },
+          {
+            "id": "1808534071",
+            "title": "Adjacent Increasing Subarrays Detection I",
+            "titleSlug": "adjacent-increasing-subarrays-detection-i",
+            "timestamp": "1761139617"
+          },
+          {
+            "id": "1804061031",
+            "title": "Adjacent Increasing Subarrays Detection II",
+            "titleSlug": "adjacent-increasing-subarrays-detection-ii",
+            "timestamp": "1760688495"
+          },
+          {
+            "id": "1803530525",
+            "title": "Smallest Missing Non-negative Integer After Operations",
+            "titleSlug": "smallest-missing-non-negative-integer-after-operations",
+            "timestamp": "1760632055"
+          },
+          {
+            "id": "1789966474",
+            "title": "Balanced Binary Tree",
+            "titleSlug": "balanced-binary-tree",
+            "timestamp": "1759479655"
+          },
+          {
+            "id": "1789955725",
+            "title": "Symmetric Tree",
+            "titleSlug": "symmetric-tree",
+            "timestamp": "1759478685"
+          },
+          {
+            "id": "1789941558",
+            "title": "Same Tree",
+            "titleSlug": "same-tree",
+            "timestamp": "1759477372"
+          },
+          {
+            "id": "1762981221",
+            "title": "Remove Linked List Elements",
+            "titleSlug": "remove-linked-list-elements",
+            "timestamp": "1757268687"
+          },
+          {
+            "id": "1762965567",
+            "title": "Palindrome Linked List",
+            "titleSlug": "palindrome-linked-list",
+            "timestamp": "1757267823"
+          },
+          {
+            "id": "1762948510",
+            "title": "Linked List Cycle",
+            "titleSlug": "linked-list-cycle",
+            "timestamp": "1757266923"
+          },
+          {
+            "id": "1733903845",
+            "title": "Power of Three",
+            "titleSlug": "power-of-three",
+            "timestamp": "1755099238"
+          }
+        ]
+      },
+      "ok": true,
+      "status": 200
+    },
+    "languageStats": {
+      "data": {
+        "matchedUser": {
+          "languageProblemCount": [
+            {
+              "languageName": "C++",
+              "problemsSolved": 3
+            },
+            {
+              "languageName": "Java",
+              "problemsSolved": 4
+            },
+            {
+              "languageName": "Python",
+              "problemsSolved": 43
+            },
+            {
+              "languageName": "C",
+              "problemsSolved": 8
+            },
+            {
+              "languageName": "JavaScript",
+              "problemsSolved": 1
+            },
+            {
+              "languageName": "Python3",
+              "problemsSolved": 27
+            }
+          ]
+        }
+      },
+      "ok": true,
+      "status": 200
+    },
+    "skillStats": {
+      "data": {
+        "matchedUser": {
+          "tagProblemCounts": {
+            "advanced": [
+              {
+                "tagName": "Backtracking",
+                "tagSlug": "backtracking",
+                "problemsSolved": 1
+              },
+              {
+                "tagName": "Dynamic Programming",
+                "tagSlug": "dynamic-programming",
+                "problemsSolved": 7
+              },
+              {
+                "tagName": "Divide and Conquer",
+                "tagSlug": "divide-and-conquer",
+                "problemsSolved": 1
+              },
+              {
+                "tagName": "Trie",
+                "tagSlug": "trie",
+                "problemsSolved": 1
+              },
+              {
+                "tagName": "Segment Tree",
+                "tagSlug": "segment-tree",
+                "problemsSolved": 1
+              }
+            ],
+            "intermediate": [
+              {
+                "tagName": "Tree",
+                "tagSlug": "tree",
+                "problemsSolved": 3
+              },
+              {
+                "tagName": "Binary Tree",
+                "tagSlug": "binary-tree",
+                "problemsSolved": 3
+              },
+              {
+                "tagName": "Hash Table",
+                "tagSlug": "hash-table",
+                "problemsSolved": 17
+              },
+              {
+                "tagName": "Ordered Set",
+                "tagSlug": "ordered-set",
+                "problemsSolved": 1
+              },
+              {
+                "tagName": "Greedy",
+                "tagSlug": "greedy",
+                "problemsSolved": 7
+              },
+              {
+                "tagName": "Binary Search",
+                "tagSlug": "binary-search",
+                "problemsSolved": 12
+              },
+              {
+                "tagName": "Depth-First Search",
+                "tagSlug": "depth-first-search",
+                "problemsSolved": 3
+              },
+              {
+                "tagName": "Breadth-First Search",
+                "tagSlug": "breadth-first-search",
+                "problemsSolved": 2
+              },
+              {
+                "tagName": "Recursion",
+                "tagSlug": "recursion",
+                "problemsSolved": 7
+              },
+              {
+                "tagName": "Sliding Window",
+                "tagSlug": "sliding-window",
+                "problemsSolved": 6
+              },
+              {
+                "tagName": "Bit Manipulation",
+                "tagSlug": "bit-manipulation",
+                "problemsSolved": 5
+              },
+              {
+                "tagName": "Math",
+                "tagSlug": "math",
+                "problemsSolved": 17
+              },
+              {
+                "tagName": "Design",
+                "tagSlug": "design",
+                "problemsSolved": 1
+              }
+            ],
+            "fundamental": [
+              {
+                "tagName": "Array",
+                "tagSlug": "array",
+                "problemsSolved": 44
+              },
+              {
+                "tagName": "Matrix",
+                "tagSlug": "matrix",
+                "problemsSolved": 4
+              },
+              {
+                "tagName": "String",
+                "tagSlug": "string",
+                "problemsSolved": 25
+              },
+              {
+                "tagName": "Simulation",
+                "tagSlug": "simulation",
+                "problemsSolved": 5
+              },
+              {
+                "tagName": "Sorting",
+                "tagSlug": "sorting",
+                "problemsSolved": 9
+              },
+              {
+                "tagName": "Stack",
+                "tagSlug": "stack",
+                "problemsSolved": 3
+              },
+              {
+                "tagName": "Queue",
+                "tagSlug": "queue",
+                "problemsSolved": 1
+              },
+              {
+                "tagName": "Linked List",
+                "tagSlug": "linked-list",
+                "problemsSolved": 6
+              },
+              {
+                "tagName": "Two Pointers",
+                "tagSlug": "two-pointers",
+                "problemsSolved": 19
+              }
+            ]
+          }
+        }
+      },
+      "ok": true,
+      "status": 200
+    },
+    "userContestRankingInfo": {
+      "data": {
+        "userContestRanking": null,
+        "userContestRankingHistory": []
+      },
+      "ok": true,
+      "status": 200
+    },
+    "userPublicProfile": {
+      "data": {
+        "matchedUser": {
+          "username": "Passive_User",
+          "githubUrl": null,
+          "twitterUrl": null,
+          "linkedinUrl": null,
+          "profile": {
+            "ranking": 1773093,
+            "userAvatar": "https://assets.leetcode.com/users/Passive_User/avatar_1729093862.png",
+            "realName": "Sree Raj Muthaiya",
+            "aboutMe": "I am a rookie who knows to code",
+            "school": null,
+            "websites": [],
+            "countryName": null,
+            "company": null,
+            "jobTitle": null,
+            "skillTags": [
+              "Python"
+            ]
+          }
+        }
+      },
+      "ok": true,
+      "status": 200
+    }
+  }
+}

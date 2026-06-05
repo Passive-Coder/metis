@@ -40,10 +40,15 @@ class PythonFeatureVisitor(ast.NodeVisitor):
         self.loaded_names: Counter[str] = Counter()
         self.mutations: Counter[str] = Counter()
         self.comparisons: Counter[str] = Counter()
+        self.import_names: Counter[str] = Counter()
+        self.literal_types: Counter[str] = Counter()
+        self.operator_types: Counter[str] = Counter()
         self.max_depth = 0
         self.current_depth = 0
         self.function_names: list[str] = []
+        self.membership_tests = 0
         self.recursive_calls = 0
+        self.subscript_count = 0
 
     def generic_visit(self, node: ast.AST) -> None:
         self.node_types[type(node).__name__] += 1
@@ -63,6 +68,18 @@ class PythonFeatureVisitor(ast.NodeVisitor):
             self.call_names[name] += 1
             if self.function_names and name == self.function_names[-1]:
                 self.recursive_calls += 1
+        self.generic_visit(node)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            self.import_names[alias.name.split(".")[0]] += 1
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.module:
+            self.import_names[node.module.split(".")[0]] += 1
+        for alias in node.names:
+            self.import_names[alias.name] += 1
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:
@@ -88,9 +105,31 @@ class PythonFeatureVisitor(ast.NodeVisitor):
             self.mutations[node.attr] += 1
         self.generic_visit(node)
 
+    def visit_BinOp(self, node: ast.BinOp) -> None:
+        self.operator_types[type(node.op).__name__] += 1
+        self.generic_visit(node)
+
+    def visit_BoolOp(self, node: ast.BoolOp) -> None:
+        self.operator_types[type(node.op).__name__] += 1
+        self.generic_visit(node)
+
+    def visit_UnaryOp(self, node: ast.UnaryOp) -> None:
+        self.operator_types[type(node.op).__name__] += 1
+        self.generic_visit(node)
+
     def visit_Compare(self, node: ast.Compare) -> None:
         for op in node.ops:
             self.comparisons[type(op).__name__] += 1
+            if isinstance(op, (ast.In, ast.NotIn)):
+                self.membership_tests += 1
+        self.generic_visit(node)
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        self.literal_types[type(node.value).__name__] += 1
+        self.generic_visit(node)
+
+    def visit_Subscript(self, node: ast.Subscript) -> None:
+        self.subscript_count += 1
         self.generic_visit(node)
 
     @staticmethod
@@ -257,16 +296,42 @@ def extract_python_code_features(source_code: str) -> CodeFeatures:
     normalized_tree = ShapeNormalizer().visit(ast.fix_missing_locations(tree))
     shape_dump = ast.dump(normalized_tree, include_attributes=False)
     hints = _algorithm_hints(visitor)
+    active_algorithm_signals = sum(1 for value in hints.values() if value > 0)
+    data_structure_signal_count = sum(
+        1
+        for value in (
+            visitor.node_types["Dict"],
+            visitor.node_types["Set"],
+            visitor.node_types["List"],
+            visitor.call_names["deque"],
+            visitor.call_names["set"],
+            visitor.call_names["dict"],
+            visitor.call_names["heapq.heappush"] + visitor.call_names["heapq.heappop"],
+        )
+        if value > 0
+    )
+    control_node_count = (
+        visitor.node_types["For"]
+        + visitor.node_types["While"]
+        + visitor.node_types["If"]
+        + visitor.node_types["Try"]
+        + visitor.node_types["Match"]
+    )
     semantic_parts = [
+        ",".join(f"{name}:{count}" for name, count in sorted(visitor.assigned_names.items())),
         ",".join(f"{name}:{count}" for name, count in sorted(visitor.call_names.items())),
         ",".join(f"{name}:{count}" for name, count in sorted(visitor.mutations.items())),
         ",".join(f"{name}:{count}" for name, count in sorted(visitor.comparisons.items())),
+        ",".join(f"{name}:{count}" for name, count in sorted(visitor.import_names.items())),
+        ",".join(f"{name}:{count}" for name, count in sorted(visitor.operator_types.items())),
+        ",".join(f"{name}:{count}" for name, count in sorted(visitor.literal_types.items())),
         ",".join(f"{name}:{value}" for name, value in sorted(hints.items()) if value > 0),
         tree_sitter_shape_hash or "",
     ]
 
     metrics = {
         "assignment_name_entropy": _entropy(visitor.assigned_names),
+        "algorithm_signal_count": float(active_algorithm_signals),
         "branch_count": float(visitor.node_types["If"]),
         "call_count": float(sum(visitor.call_names.values())),
         "call_entropy": _entropy(visitor.call_names),
@@ -276,15 +341,21 @@ def extract_python_code_features(source_code: str) -> CodeFeatures:
             + visitor.node_types["SetComp"]
             + visitor.node_types["GeneratorExp"]
         ),
+        "control_node_count": float(control_node_count),
         "data_mutation_count": float(sum(visitor.mutations.values())),
+        "data_structure_signal_count": float(data_structure_signal_count),
         "function_count": float(visitor.node_types["FunctionDef"] + visitor.node_types["AsyncFunctionDef"]),
         "loop_count": float(visitor.node_types["For"] + visitor.node_types["While"]),
         "max_ast_depth": float(visitor.max_depth),
+        "membership_test_count": float(visitor.membership_tests),
         "node_count": float(sum(visitor.node_types.values())),
+        "operator_entropy": _entropy(visitor.operator_types),
         "parse_error": 0.0,
         "recursive_call_count": float(visitor.recursive_calls),
         "return_count": float(visitor.node_types["Return"]),
+        "semantic_collision_risk": float(active_algorithm_signals == 0 and data_structure_signal_count <= 1),
         "source_length": float(len(source_code)),
+        "subscript_count": float(visitor.subscript_count),
         "unique_call_count": float(len(visitor.call_names)),
         "unique_identifier_count": float(len(visitor.assigned_names | visitor.loaded_names)),
         **tree_sitter_metrics,

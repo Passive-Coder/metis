@@ -7,8 +7,10 @@ from psycopg.types.json import Jsonb
 
 from .clustering import cluster_problem_embeddings
 from .code_features import extract_python_code_features
+from .config import settings
 from .db import get_connection
 from .encoders import combine_embeddings, encode_problem_statement, encode_solution_code
+from .ranker_models import FEATURE_ORDER
 from .recommender import ensure_user, recommend
 from .spaced_repetition import ReviewState, sm2_update
 from .topic_graph import seed_static_topic_graph, sync_topic_graph_to_neo4j
@@ -57,6 +59,14 @@ def sha256_text(value: str) -> str:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/ranker/features")
+def ranker_features() -> dict[str, Any]:
+    return {
+        "feature_order": FEATURE_ORDER,
+        "ranker_model": settings.ranker_model,
+    }
 
 
 @app.post("/topics/seed")
